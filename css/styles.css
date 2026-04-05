@@ -1,5 +1,5 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
-
+@import "tailwindcss";
 :root {
   /* Default Green Theme */
   --primary: #10B981;
@@ -101,6 +101,9 @@ html, body {
 /* Day/Date Selector */
 .date-card {
   transition: all 0.3s ease;
+  position: relative;
+  overflow: visible !important;
+  isolation: isolate; /* ensure stacking context doesn't clip children */
 }
 
 .date-card.active {
@@ -112,7 +115,71 @@ html, body {
 
 .date-card:not(.active) {
   background-color: var(--card-bg);
-  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05); /* Slight shadow to match ref */
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
+}
+
+/* Date slider - allow enough padding for the notification dots */
+#mobile-date-selector {
+  padding-top: 12px;
+  padding-bottom: 6px;
+  overflow-x: auto;
+  overflow-y: visible !important;
+  clip-path: none !important;
+}
+
+/* Numeric stepper in calendar page */
+.cal-numeric-stepper {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.cal-numeric-stepper button {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 2px solid var(--primary);
+  color: var(--primary);
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+  flex-shrink: 0;
+}
+.cal-numeric-stepper button:hover {
+  background: var(--primary);
+  color: white;
+}
+.cal-numeric-circle {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 2px solid var(--primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s, color 0.2s;
+  flex-shrink: 0;
+}
+.cal-numeric-circle input {
+  width: 100%;
+  height: 100%;
+  background: transparent;
+  text-align: center;
+  font-weight: 700;
+  font-size: 0.85rem;
+  border: none;
+  outline: none;
+  color: var(--primary);
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+.cal-numeric-circle.filled {
+  background: var(--primary);
+}
+.cal-numeric-circle.filled input {
+  color: white;
 }
 
 /* Habit List Cards */
@@ -193,4 +260,28 @@ html, body {
     transform: scale(4);
     opacity: 0;
   }
+}
+
+/* Hide number input spinners */
+input[type="number"].numeric-input::-webkit-outer-spin-button,
+input[type="number"].numeric-input::-webkit-inner-spin-button,
+input[type="number"].cal-num-input::-webkit-outer-spin-button,
+input[type="number"].cal-num-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+/* Red dot notification badges */
+.red-dot {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 11px;
+  height: 11px;
+  background-color: #EF4444;
+  border-radius: 50%;
+  border: 2px solid #FAFAFA;
+  z-index: 30;
+  pointer-events: none;
+  box-shadow: 0 1px 4px rgba(239,68,68,0.4);
 }

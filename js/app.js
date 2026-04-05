@@ -10,8 +10,51 @@ function initTheme() {
     const savedTheme = localStorage.getItem('theme') || 'green';
     document.documentElement.setAttribute('data-theme', savedTheme);
     
+    // Setup background gradient immediately
+    setupBackgroundGradient(savedTheme);
+
     // Dispatch event for other scripts
     document.dispatchEvent(new CustomEvent('themeChanged', { detail: { theme: savedTheme } }));
+}
+
+// Global dynamic background gradient setup setup
+function setupBackgroundGradient(theme) {
+    let container = document.querySelector('main.flex-1.overflow-y-auto') || document.querySelector('main');
+    if (!container) {
+        container = document.body;
+        // make sure body is relative so absolute positioning works if it's the scroll container
+        if(getComputedStyle(container).position === 'static') {
+            container.style.position = 'relative';
+        }
+    }
+    
+    // Check if it already exists
+    let bgGradient = document.getElementById('theme-bg-gradient');
+    if (!bgGradient) {
+        bgGradient = document.createElement('div');
+        bgGradient.id = 'theme-bg-gradient';
+        bgGradient.className = 'absolute top-0 left-0 right-0 h-[400px] z-0 pointer-events-none transition-all duration-700';
+        container.insertBefore(bgGradient, container.firstChild);
+    } else {
+        // Update classes if it exists (override legacy fixed inset-0)
+        bgGradient.className = 'absolute top-0 left-0 right-0 h-[400px] z-0 pointer-events-none transition-all duration-700';
+        if (bgGradient.parentElement !== container) {
+            container.insertBefore(bgGradient, container.firstChild);
+        }
+    }
+    
+    updateGradientColor(theme || document.documentElement.getAttribute('data-theme') || 'green');
+}
+
+function updateGradientColor(theme) {
+    const bgGradient = document.getElementById('theme-bg-gradient');
+    if (bgGradient) {
+         if (theme === 'blue') {
+             bgGradient.style.background = 'linear-gradient(180deg, #4480ba 0%, #acc9e6 50%, rgba(255,255,255,0) 100%)'; 
+         } else {
+             bgGradient.style.background = 'linear-gradient(180deg, #10B981 0%, #6ee7b7 50%, rgba(255,255,255,0) 100%)';
+         }
+    }
 }
 
 // Toggle theme between green and blue
@@ -21,6 +64,8 @@ function toggleTheme() {
     
     document.documentElement.setAttribute('data-theme', newTheme);
     localStorage.setItem('theme', newTheme);
+    
+    updateGradientColor(newTheme);
     
     // Dispatch event
     document.dispatchEvent(new CustomEvent('themeChanged', { detail: { theme: newTheme } }));
@@ -87,8 +132,8 @@ function initApp() {
     renderDynamicDateSlider();
     initHeroSlider();
     
-    // Add ripple effect to buttons
-    const rippleButtons = document.querySelectorAll('.fab, .nav-item, .date-card, .check-btn');
+    // Add ripple effect for a satisfying click animation to all interactive elements
+    const rippleButtons = document.querySelectorAll('.fab, .nav-item, .date-card, .check-btn, button, .account-btn, .cal-day');
     rippleButtons.forEach(btn => {
         // Ensure relative positioning
         if (getComputedStyle(btn).position === 'static') {
@@ -250,6 +295,7 @@ async function handleEmailRegister(event) {
     btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Loading...';
     btn.disabled = true;
 
+    const username = document.getElementById('username').value;
     const name = document.getElementById('name').value;
     const email = document.getElementById('email').value;
     const password = document.getElementById('password').value;
@@ -259,7 +305,8 @@ async function handleEmailRegister(event) {
         password: password,
         options: {
             data: {
-                full_name: name
+                full_name: name,
+                username: username
             }
         }
     });
@@ -269,6 +316,22 @@ async function handleEmailRegister(event) {
         btn.innerText = originalText;
         btn.disabled = false;
     } else {
+        // Save profile data (username, email, password_hash) to profiles table
+        if (data.user) {
+            try {
+                await supabaseClient
+                    .from('profiles')
+                    .upsert({
+                        id: data.user.id,
+                        full_name: name,
+                        username: username,
+                        email: email,
+                        password_hash: btoa(password) // base64 encoded for storage
+                    }, { onConflict: 'id' });
+            } catch (profileErr) {
+                console.error('Profile save error:', profileErr);
+            }
+        }
         alert('Account created! Please check your email to confirm your registration.');
         btn.innerText = originalText;
         btn.disabled = false;
@@ -369,6 +432,7 @@ function renderDatesForMonth(year, monthIndex, activeDateToSet = null, scroll = 
     for (let i = 1; i <= daysInMonth; i++) {
         const d = new Date(year, monthIndex, i);
         const dayName = days[d.getDay()];
+        const dateStr = d.toISOString().slice(0, 10);
         
         let isActive = '';
         let style = '';
@@ -384,7 +448,7 @@ function renderDatesForMonth(year, monthIndex, activeDateToSet = null, scroll = 
         }
         
         dateHtml += `
-            <button id="slider-date-${i}" class="date-card ${isActive} min-w-[60px] h-[75px] rounded-2xl flex flex-col items-center justify-center shrink-0 focus:outline-none" style="${style}" onclick="selectSliderDate(this, ${i})">
+            <button id="slider-date-${i}" class="date-card ${isActive} min-w-[60px] h-[75px] rounded-2xl flex flex-col items-center justify-center shrink-0 focus:outline-none" style="${style}" data-date="${dateStr}" onclick="selectSliderDate(this, ${i})">
                 <span class="text-xl font-bold">${i}</span>
                 <span class="text-xs font-medium mt-1">${dayName}</span>
             </button>
@@ -398,8 +462,8 @@ function renderDatesForMonth(year, monthIndex, activeDateToSet = null, scroll = 
     newCards.forEach(btn => {
         if (getComputedStyle(btn).position === 'static') {
             btn.style.position = 'relative';
-            btn.style.overflow = 'hidden';
         }
+        btn.style.overflow = 'visible';
         btn.addEventListener('mousedown', createRipple);
         btn.addEventListener('touchstart', (e) => {
             if(e.touches.length > 0) {
@@ -478,5 +542,5 @@ function selectSliderDate(el, dateNum) {
 }
 
 function openAddModal() {
-    alert("Add Habit modal will open here!");
+    window.location.href = 'add_habit.html';
 }
