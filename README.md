@@ -44,9 +44,9 @@
     - NIM: [A320250028]
     - Jurusan: [Rekayasa Perangkat Lunak]
 
-    - Nama: [Nama Anda]
-    - NIM: [NIM Anda]
-    - Jurusan: [Jurusan Anda]
+    - Nama: [Dimas Aldi Rivaldo]
+    - NIM: [A320250017]
+    - Jurusan: [Rekayasa Perangkat Lunak]
 
     - Nama: [Zaky Choirul Alfan]
     - NIM: [A320250001]
