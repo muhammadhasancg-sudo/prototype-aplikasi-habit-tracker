@@ -36,21 +36,21 @@
     - NIM: [A320250013]
     - Jurusan: [Rekayasa Perangkat Lunak]
 
-    - Nama: [Nama Anda]
-    - NIM: [NIM Anda]
-    - Jurusan: [Jurusan Anda]
+    - Nama: [Muhammad Aulia Akbar]
+    - NIM: [A320250033]
+    - Jurusan: [Rekayasa Perangkat Lunak]
 
-    - Nama: [Nama Anda]
-    - NIM: [NIM Anda]
-    - Jurusan: [Jurusan Anda]
+    - Nama: [Muhammad Hasanudin]
+    - NIM: [A320250028]
+    - Jurusan: [Rekayasa Perangkat Lunak]
 
     - Nama: [Dimas Aldi Rivaldo]
     - NIM: [A320250017]
     - Jurusan: [Rekayasa Perangkat Lunak]
 
-    - Nama: [Nama Anda]
-    - NIM: [NIM Anda]
-    - Jurusan: [Jurusan Anda]
+    - Nama: [Zaky Choirul Alfan]
+    - NIM: [A320250001]
+    - Jurusan: [Rekayasa Perangkat Lunak]
     
     - Nama: [Nama Anda]
     - NIM: [NIM Anda]
