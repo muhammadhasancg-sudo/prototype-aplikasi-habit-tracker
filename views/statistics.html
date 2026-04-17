@@ -274,7 +274,9 @@
             initCharts(newPeriod);
         }
 
-        document.addEventListener('DOMContentLoaded', () => {
+        document.addEventListener('DOMContentLoaded', async () => {
+            // Sync habits from Supabase before rendering charts
+            await syncHabitsFromSupabase();
             initCharts(currentPeriod);
             
             // Re-render charts when theme changes

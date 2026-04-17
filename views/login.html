@@ -57,7 +57,7 @@
                     <input type="password" id="password" class="w-full pl-11 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:border-transparent theme-focus-ring transition" placeholder="••••••••" required>
                 </div>
                 <div class="flex justify-end mt-2">
-                    <a href="#" class="text-xs font-medium text-gray-500 hover:text-gray-700">Forgot Password?</a>
+                    <a href="#" onclick="handleForgotPassword(event)" class="text-sm font-semibold text-[var(--primary)] hover:underline">Forgot Password?</a>
                 </div>
             </div>
 
@@ -111,6 +111,22 @@
                 el.classList.remove('focus:ring-green-500', 'focus:ring-blue-500');
                 el.classList.add(theme === 'blue' ? 'focus:ring-blue-500' : 'focus:ring-green-500');
             });
+        }
+
+        async function handleForgotPassword(e) {
+            e.preventDefault();
+            const email = prompt("Enter your email address to receive a password reset link:");
+            if (!email || !email.trim()) return;
+            try {
+                const { error } = await supabaseClient.auth.resetPasswordForEmail(email.trim());
+                if (error) {
+                    alert('Error: ' + error.message);
+                } else {
+                    alert('Password reset link sent! Please check your email.');
+                }
+            } catch (err) {
+                alert('Failed to send reset link. Please try again.');
+            }
         }
     </script>
 </body>

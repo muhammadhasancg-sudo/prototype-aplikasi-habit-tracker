@@ -36,12 +36,12 @@
     <header class="px-6 pt-8 pb-4 flex justify-between items-center animate-slide-up relative z-20">
         <div class="flex items-center gap-3">
             <a href="profile.html" class="w-12 h-12 rounded-full overflow-hidden border-2 border-white/40 shadow-sm relative group block cursor-pointer transition transform hover:scale-105 active:scale-95">
-                <img src="https://i.pravatar.cc/150?img=11" alt="Profile" class="w-full h-full object-cover">
+                <img id="dashboard-avatar" src="https://i.pravatar.cc/150?img=11" alt="Profile" class="w-full h-full object-cover">
             </a>
             <div>
                 <p class="text-[10px] font-bold text-white/80 uppercase tracking-wider shadow-sm" style="text-shadow: 0 1px 2px rgba(0,0,0,0.1)">WELCOME BACK</p>
                 <div class="flex items-center gap-1">
-                    <h1 class="text-xl font-bold text-white leading-none shadow-sm" style="text-shadow: 0 1px 2px rgba(0,0,0,0.1)">Username</h1>
+                    <h1 id="dashboard-username" class="text-xl font-bold text-white leading-none shadow-sm" style="text-shadow: 0 1px 2px rgba(0,0,0,0.1)">Loading...</h1>
                     <div class="text-white text-sm">
                         <i class="fa-solid fa-circle-check"></i>
                     </div>
@@ -178,10 +178,24 @@
             }
         }
 
-        document.addEventListener('DOMContentLoaded', () => {
+        document.addEventListener('DOMContentLoaded', async () => {
             // Set login date on first visit
             getLoginDate();
-            // Render habits from localStorage
+
+            // Load dynamic user info
+            if (supabaseClient) {
+                const { data: { user } } = await supabaseClient.auth.getUser();
+                if (user) {
+                    const name = user.user_metadata?.full_name || 'User';
+                    const usernameEl = document.getElementById('dashboard-username');
+                    const avatarEl = document.getElementById('dashboard-avatar');
+                    if (usernameEl) usernameEl.textContent = name;
+                    if (avatarEl) avatarEl.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random&color=fff`;
+                }
+            }
+
+            // Sync habits from Supabase, then render
+            await syncHabitsFromSupabase();
             renderHomeHabits();
             updateShadows(document.documentElement.getAttribute('data-theme') || 'green');
             // Red dots on date slider

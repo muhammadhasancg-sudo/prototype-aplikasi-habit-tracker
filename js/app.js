@@ -130,7 +130,6 @@ function toggleHabit(btn) {
 function initApp() {
     initTheme();
     renderDynamicDateSlider();
-    initHeroSlider();
     
     // Add ripple effect for a satisfying click animation to all interactive elements
     const rippleButtons = document.querySelectorAll('.fab, .nav-item, .date-card, .check-btn, button, .account-btn, .cal-day');
@@ -168,66 +167,7 @@ function initApp() {
     }
 }
 
-function initHeroSlider() {
-    const track = document.getElementById('hero-slider-track');
-    const dotsContainer = document.getElementById('hero-slider-dots');
-    
-    if (!track || !dotsContainer) return;
-    
-    const dots = Array.from(dotsContainer.querySelectorAll('button'));
-    
-    const updateDots = () => {
-        const scrollLeft = track.scrollLeft;
-        const width = track.clientWidth;
-        // Prevent div by zero if width is 0
-        if (width === 0) return;
-        
-        const currentSlideIndex = Math.round(scrollLeft / width);
-        
-        const theme = document.documentElement.getAttribute('data-theme') || 'green';
-        const primaryColor = theme === 'blue' ? '#5BA4C9' : '#10B981';
-        
-        dots.forEach((dot, index) => {
-            if (index === currentSlideIndex) {
-                 dot.style.opacity = '1';
-                 dot.style.width = '1.25rem'; // w-5
-                 dot.style.backgroundColor = primaryColor;
-                 dot.classList.add('dot-active');
-            } else {
-                 dot.style.opacity = '0.5';
-                 dot.style.width = '0.5rem'; // w-2
-                 dot.style.backgroundColor = 'white';
-                 dot.classList.remove('dot-active');
-            }
-        });
-    };
-
-    track.addEventListener('scroll', updateDots);
-
-    // Initial setting of dots based on the theme
-    updateDots();
-    
-    // Add click event to dots to navigate to the specific slide
-    dots.forEach((dot, index) => {
-        dot.addEventListener('click', () => {
-            const width = track.clientWidth;
-            track.scrollTo({
-                left: index * width,
-                behavior: 'smooth'
-            });
-        });
-    });
-
-    // Update dots colors when theme changes
-    document.addEventListener('themeChanged', (e) => {
-        const theme = e.detail.theme;
-        const primaryColor = theme === 'blue' ? '#5BA4C9' : '#10B981';
-        const activeDot = dotsContainer.querySelector('.dot-active');
-        if (activeDot) {
-            activeDot.style.backgroundColor = primaryColor;
-        }
-    });
-}
+// initHeroSlider removed — Swiper.js handles the hero slider in index.html
 
 // Ensure initApp runs reliably whether script loads before or after DOM parse
 if (document.readyState === 'loading') {
@@ -315,8 +255,15 @@ async function handleEmailRegister(event) {
         alert("Registration failed: " + error.message);
         btn.innerText = originalText;
         btn.disabled = false;
+    } else if (data.user && !data.session) {
+        // Supabase returns user but no session when email already exists (repeated signup)
+        // or when email confirmation is pending
+        alert("This email is already registered. Please log in instead, or use 'Forgot Password' if you've forgotten your password.");
+        btn.innerText = originalText;
+        btn.disabled = false;
+        window.location.href = 'login.html';
     } else {
-        // Save profile data (username, email, password_hash) to profiles table
+        // Successful registration — user is auto-confirmed
         if (data.user) {
             try {
                 await supabaseClient
@@ -325,33 +272,20 @@ async function handleEmailRegister(event) {
                         id: data.user.id,
                         full_name: name,
                         username: username,
-                        email: email,
-                        password_hash: btoa(password) // base64 encoded for storage
+                        email: email
                     }, { onConflict: 'id' });
             } catch (profileErr) {
                 console.error('Profile save error:', profileErr);
             }
         }
-        alert('Account created! Please check your email to confirm your registration.');
+        alert('Account created successfully! You can now log in.');
         btn.innerText = originalText;
         btn.disabled = false;
         window.location.href = 'login.html';
     }
 }
 
-async function handleGoogleAuth() {
-    const { data, error } = await supabaseClient.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-            // redirect to dashboard after google auth
-            redirectTo: window.location.origin + '/views/index.html'
-        }
-    });
-    
-    if (error) {
-        alert("Google Auth Error: " + error.message);
-    }
-}
+// Google OAuth removed — currently disabled in the UI
 
 async function handleSignOut() {
     if(confirm("Are you sure you want to log out?")) {

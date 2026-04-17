@@ -47,8 +47,8 @@
             </h2>
             <p class="text-sm text-gray-500 font-medium mt-1" id="display-email">loading...</p>
             
-            <span class="mt-3 px-3 py-1 bg-gray-100 text-gray-600 rounded-full text-xs font-semibold flex items-center gap-1">
-                <i class="fa-brands fa-google text-sm mt-px"></i> Google Authenticated
+            <span id="auth-badge" class="mt-3 px-3 py-1 bg-gray-100 text-gray-600 rounded-full text-xs font-semibold flex items-center gap-1">
+                <i class="fa-solid fa-envelope text-sm mt-px"></i> Email Authenticated
             </span>
         </div>
     </section>
@@ -145,36 +145,72 @@
 
     <script src="../js/app.js"></script>
     <script>
-        // Mock profile actions
-        function editUsername() {
+        let _currentUser = null;
+
+        async function editUsername() {
             const currentName = document.getElementById('display-username').innerText;
             const newName = prompt("Enter your new username:", currentName);
-            if(newName && newName.trim() !== "") {
-                document.getElementById('display-username').innerText = newName.trim();
-                alert(`Username updated to ${newName.trim()}!`);
+            if (newName && newName.trim() !== "") {
+                const trimmed = newName.trim();
+                document.getElementById('display-username').innerText = trimmed;
+
+                // Persist to Supabase
+                if (supabaseClient && _currentUser) {
+                    try {
+                        await supabaseClient.from('profiles').update({ full_name: trimmed }).eq('id', _currentUser.id);
+                        await supabaseClient.auth.updateUser({ data: { full_name: trimmed } });
+                        alert(`Username updated to ${trimmed}!`);
+                    } catch (err) {
+                        console.error('Update username error:', err);
+                        alert('Failed to update username. Please try again.');
+                    }
+                }
             }
         }
-        
-        function resetPassword() {
-            if(confirm("Send a password reset link to user@example.com?")) {
-                alert("Reset link sent! Please check your email.");
+
+        async function resetPassword() {
+            if (!_currentUser) return;
+            const email = _currentUser.email;
+            if (confirm(`Send a password reset link to ${email}?`)) {
+                try {
+                    const { error } = await supabaseClient.auth.resetPasswordForEmail(email);
+                    if (error) {
+                        alert('Error: ' + error.message);
+                    } else {
+                        alert('Reset link sent! Please check your email.');
+                    }
+                } catch (err) {
+                    alert('Failed to send reset link.');
+                }
             }
         }
-        
+
         function logout() {
             handleSignOut();
         }
-        
+
         document.addEventListener('DOMContentLoaded', async () => {
             // Fetch User Details to display
-            if (supabase) {
-                const { data: { user } } = await supabase.auth.getUser();
+            if (supabaseClient) {
+                const { data: { user } } = await supabaseClient.auth.getUser();
                 if (user) {
+                    _currentUser = user;
                     const name = user.user_metadata?.full_name || 'User';
                     const email = user.email;
                     document.getElementById('display-username').innerText = name;
                     document.getElementById('display-email').innerText = email;
-                    document.getElementById('profile-img').src = `https://ui-avatars.com/api/?name=${name}&background=random&color=fff`;
+                    document.getElementById('profile-img').src = `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random&color=fff`;
+
+                    // Show correct auth provider badge
+                    const provider = user.app_metadata?.provider || 'email';
+                    const badge = document.getElementById('auth-badge');
+                    if (badge) {
+                        if (provider === 'google') {
+                            badge.innerHTML = '<i class="fa-brands fa-google text-sm mt-px"></i> Google Authenticated';
+                        } else {
+                            badge.innerHTML = '<i class="fa-solid fa-envelope text-sm mt-px"></i> Email Authenticated';
+                        }
+                    }
                 }
             }
         });
