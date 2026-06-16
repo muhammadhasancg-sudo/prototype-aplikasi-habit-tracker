@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -22,16 +23,21 @@
         }
     </script>
 </head>
+
 <body class="bg-gray-50 flex items-center justify-center min-h-screen px-6">
 
-    <div class="w-full max-w-md bg-white rounded-3xl p-8 shadow-sm border border-gray-100 animate-slide-up relative overflow-hidden">
-        
+    <div
+        class="w-full max-w-md bg-white rounded-3xl p-8 shadow-sm border border-gray-100 animate-slide-up relative overflow-hidden">
+
         <!-- Decorative blob -->
-        <div class="absolute -top-16 -right-16 w-32 h-32 rounded-full opacity-10 theme-bg-update" style="background-color: var(--primary);"></div>
-        <div class="absolute -bottom-16 -left-16 w-32 h-32 rounded-full opacity-10 theme-bg-update" style="background-color: var(--primary);"></div>
+        <div class="absolute -top-16 -right-16 w-32 h-32 rounded-full opacity-10 theme-bg-update"
+            style="background-color: var(--primary);"></div>
+        <div class="absolute -bottom-16 -left-16 w-32 h-32 rounded-full opacity-10 theme-bg-update"
+            style="background-color: var(--primary);"></div>
 
         <div class="text-center mb-8 relative z-10">
-            <div class="w-16 h-16 rounded-full mx-auto flex items-center justify-center text-3xl mb-4 theme-text-update theme-bg-light" style="color: var(--primary); background-color: var(--primary-light);">
+            <div class="w-16 h-16 rounded-full mx-auto flex items-center justify-center text-3xl mb-4 theme-text-update theme-bg-light"
+                style="color: var(--primary); background-color: var(--primary-light);">
                 <i class="fa-solid fa-leaf"></i>
             </div>
             <h1 class="text-2xl font-bold text-gray-900">Welcome Back</h1>
@@ -45,7 +51,9 @@
                     <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                         <i class="fa-regular fa-envelope text-gray-400"></i>
                     </div>
-                    <input type="email" id="email" class="w-full pl-11 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:border-transparent theme-focus-ring transition" placeholder="you@example.com" required>
+                    <input type="email" id="email"
+                        class="w-full pl-11 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:border-transparent theme-focus-ring transition"
+                        placeholder="you@example.com" required>
                 </div>
             </div>
 
@@ -55,17 +63,23 @@
                     <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                         <i class="fa-solid fa-lock text-gray-400"></i>
                     </div>
-                    <input type="password" id="password" class="w-full pl-11 pr-12 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:border-transparent theme-focus-ring transition" placeholder="••••••••" required>
-                    <button type="button" onclick="togglePasswordVisibility('password', 'password-toggle-icon')" class="absolute inset-y-0 right-0 pr-4 flex items-center text-gray-400 hover:text-gray-600 transition">
+                    <input type="password" id="password"
+                        class="w-full pl-11 pr-12 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:border-transparent theme-focus-ring transition"
+                        placeholder="••••••••" required>
+                    <button type="button" onclick="togglePasswordVisibility('password', 'password-toggle-icon')"
+                        class="absolute inset-y-0 right-0 pr-4 flex items-center text-gray-400 hover:text-gray-600 transition">
                         <i id="password-toggle-icon" class="fa-regular fa-eye"></i>
                     </button>
                 </div>
                 <div class="flex justify-end mt-2">
-                    <a href="#" onclick="handleForgotPassword(event)" class="text-sm font-semibold text-[var(--primary)] hover:underline">Forgot Password?</a>
+                    <a href="#" onclick="handleForgotPassword(event)"
+                        class="text-sm font-semibold text-[var(--primary)] hover:underline">Forgot Password?</a>
                 </div>
             </div>
 
-            <button type="submit" class="w-full py-3 mt-2 text-white font-bold rounded-xl shadow-md transform transition hover:-translate-y-0.5 active:translate-y-0 theme-bg-update" style="background-color: var(--primary);">
+            <button type="submit"
+                class="w-full py-3 mt-2 text-white font-bold rounded-xl shadow-md transform transition hover:-translate-y-0.5 active:translate-y-0 theme-bg-update"
+                style="background-color: var(--primary);">
                 Sign In
             </button>
         </form>
@@ -84,10 +98,12 @@
         -->
 
         <!-- Rate Limit Warning -->
-        <div id="rate-limit-warning" class="mt-4 p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-600 relative z-10 items-center gap-2" style="display: none;"></div>
+        <div id="rate-limit-warning"
+            class="mt-4 p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-600 relative z-10 items-center gap-2"
+            style="display: none;"></div>
 
         <p class="mt-8 text-center text-sm text-gray-600 relative z-10">
-            Don't have an account? 
+            Don't have an account?
             <a href="register.html" class="font-bold theme-text-update" style="color: var(--primary);">Sign Up</a>
         </p>
     </div>
@@ -98,7 +114,7 @@
         document.addEventListener('DOMContentLoaded', () => {
             // Apply initial theme dynamically to style attributes
             updateColors(document.documentElement.getAttribute('data-theme') || 'light');
-            
+
             document.addEventListener('themeChanged', (e) => {
                 updateColors(e.detail.theme);
             });
@@ -109,11 +125,11 @@
         function updateColors(theme) {
             const primary = '#10B981';
             const primaryLight = theme === 'dark' ? '#064E3B' : '#D1FAE5';
-            
+
             document.querySelectorAll('.theme-bg-update').forEach(el => el.style.backgroundColor = primary);
             document.querySelectorAll('.theme-text-update').forEach(el => el.style.color = primary);
             document.querySelectorAll('.theme-bg-light').forEach(el => el.style.backgroundColor = primaryLight);
-            
+
             // For focus ring (tailwind)
             document.querySelectorAll('.theme-focus-ring').forEach(el => {
                 el.classList.remove('focus:ring-green-500', 'focus:ring-blue-500');
@@ -152,4 +168,5 @@
         }
     </script>
 </body>
+
 </html>

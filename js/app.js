@@ -6,20 +6,29 @@ const supabaseClient = window.supabase ? window.supabase.createClient(SUPABASE_U
 
 // Initialize theme
 function initTheme() {
-    // Default to light if not set
-    const savedTheme = localStorage.getItem('theme') || 'light';
-    document.documentElement.setAttribute('data-theme', savedTheme);
+    const isAdminPage = window.location.pathname.toLowerCase().includes('admin_dashboard.html');
     
-    // Setup background gradient immediately
-    setupBackgroundGradient(savedTheme);
-
-    // Dispatch event for other scripts
-    document.dispatchEvent(new CustomEvent('themeChanged', { detail: { theme: savedTheme } }));
+    if (isAdminPage) {
+        // Admin theme handling (defaults to dark)
+        const savedTheme = localStorage.getItem('admin_theme') || 'dark';
+        document.documentElement.setAttribute('data-theme', savedTheme);
+        document.dispatchEvent(new CustomEvent('themeChanged', { detail: { theme: savedTheme } }));
+    } else {
+        // User theme handling (defaults to light/green, forces out of dark)
+        let savedTheme = localStorage.getItem('theme') || 'light';
+        if (savedTheme === 'dark') {
+            savedTheme = 'light';
+            localStorage.setItem('theme', 'light');
+        }
+        document.documentElement.setAttribute('data-theme', savedTheme);
+        setupBackgroundGradient(savedTheme);
+        document.dispatchEvent(new CustomEvent('themeChanged', { detail: { theme: savedTheme } }));
+    }
 }
 
 // Global dynamic background gradient setup setup
 function setupBackgroundGradient(theme) {
-    if (window.location.pathname.includes('admin_dashboard.html')) return;
+    if (window.location.pathname.toLowerCase().includes('admin_dashboard.html')) return;
     let container = document.querySelector('main.flex-1.overflow-y-auto') || document.querySelector('main');
     if (!container) {
         container = document.body;
@@ -62,19 +71,27 @@ function updateGradientColor(theme) {
 
 // Toggle theme between light and dark
 function toggleTheme() {
-    const currentTheme = document.documentElement.getAttribute('data-theme') || 'light';
-    let newTheme;
+    const isAdminPage = window.location.pathname.toLowerCase().includes('admin_dashboard.html');
     
-    if (currentTheme === 'light') {
-        newTheme = 'dark';
+    if (isAdminPage) {
+        const currentTheme = document.documentElement.getAttribute('data-theme') || 'dark';
+        const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+        document.documentElement.setAttribute('data-theme', newTheme);
+        localStorage.setItem('admin_theme', newTheme);
+        document.dispatchEvent(new CustomEvent('themeChanged', { detail: { theme: newTheme } }));
     } else {
-        newTheme = 'light';
+        const currentTheme = document.documentElement.getAttribute('data-theme') || 'light';
+        let newTheme;
+        if (currentTheme === 'light' || currentTheme === 'green') {
+            newTheme = 'blue';
+        } else {
+            newTheme = 'green';
+        }
+        document.documentElement.setAttribute('data-theme', newTheme);
+        localStorage.setItem('theme', newTheme);
+        updateGradientColor(newTheme);
+        document.dispatchEvent(new CustomEvent('themeChanged', { detail: { theme: newTheme } }));
     }
-    
-    document.documentElement.setAttribute('data-theme', newTheme);
-    localStorage.setItem('theme', newTheme);
-    updateGradientColor(newTheme);
-    document.dispatchEvent(new CustomEvent('themeChanged', { detail: { theme: newTheme } }));
 }
 
 // Ripple effect for interactive elements
@@ -309,7 +326,7 @@ async function setupAuthListener() {
 
 function handleRouteProtection(session) {
     const currentPath = window.location.pathname.toLowerCase();
-    const isPublicRoute = currentPath.includes('login.html') || currentPath.includes('register.html');
+    const isPublicRoute = currentPath.includes('login.html') || currentPath.includes('register.html') || currentPath.includes('intro.html');
     const isAdminRoute = currentPath.includes('admin_dashboard.html');
     const isAdmin = localStorage.getItem('isAdmin') === 'true';
 
@@ -321,10 +338,11 @@ function handleRouteProtection(session) {
     }
 
     if (!session && !isPublicRoute && !isAdmin) {
-        // Not logged in and on protected page -> redirect to login
-        window.location.href = 'login.html';
+        // Not logged in and on protected page -> redirect to intro (or login if already seen)
+        const introSeen = localStorage.getItem('introSeen') === 'true';
+        window.location.href = introSeen ? 'login.html' : 'intro.html';
     } else if (session && isPublicRoute) {
-        // Logged in but on login/register page -> redirect to index
+        // Logged in but on login/register/intro page -> redirect to index
         window.location.href = 'index.html';
     } else if (isAdmin && isPublicRoute) {
         // Admin logged in but on login page
