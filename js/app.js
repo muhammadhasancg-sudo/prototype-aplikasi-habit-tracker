@@ -330,6 +330,10 @@ function handleRouteProtection(session) {
     const isAdminRoute = currentPath.includes('admin_dashboard.html');
     const isAdmin = localStorage.getItem('isAdmin') === 'true';
 
+    // Cek login via MySQL/Node.js backend (tersimpan di localStorage)
+    const mysqlUser = localStorage.getItem('currentUser');
+    const isMysqlLoggedIn = !!mysqlUser;
+
     if (isAdminRoute) {
         if (!isAdmin) {
             window.location.href = 'login.html';
@@ -337,16 +341,20 @@ function handleRouteProtection(session) {
         return;
     }
 
-    if (!session && !isPublicRoute && !isAdmin) {
-        // Not logged in and on protected page -> redirect to intro (or login if already seen)
+    // Dianggap sudah login jika: ada Supabase session, ATAU ada data user MySQL, ATAU admin
+    const isLoggedIn = session || isMysqlLoggedIn || isAdmin;
+
+    if (!isLoggedIn && !isPublicRoute) {
+        // Belum login dan berada di halaman protected -> redirect ke login/intro
         const introSeen = localStorage.getItem('introSeen') === 'true';
         window.location.href = introSeen ? 'login.html' : 'intro.html';
-    } else if (session && isPublicRoute) {
-        // Logged in but on login/register/intro page -> redirect to index
-        window.location.href = 'index.html';
-    } else if (isAdmin && isPublicRoute) {
-        // Admin logged in but on login page
-        window.location.href = 'admin_dashboard.html';
+    } else if (isLoggedIn && isPublicRoute && !isAdminRoute) {
+        // Sudah login tapi masih di halaman publik -> redirect ke index
+        if (isAdmin) {
+            window.location.href = 'admin_dashboard.html';
+        } else {
+            window.location.href = 'index.html';
+        }
     }
 }
 
@@ -577,6 +585,7 @@ async function handleSignOut() {
                 document.body.style.opacity = '0';
                 document.body.style.transition = 'opacity 0.5s ease';
                 localStorage.removeItem('isAdmin');
+                localStorage.removeItem('currentUser');
                 await supabaseClient.auth.signOut();
                 window.location.href = 'login.html';
             } catch (error) {
