@@ -1,14 +1,17 @@
-// ===== habits.js — Shared Habit Data Layer (Supabase-first) =====
-// Uses Supabase as source of truth with localStorage as cache.
-// supabaseClient is defined in app.js (loaded after this file).
+// ===== habits.js — Shared Habit Data Layer (MySQL-first) =====
+// Source of truth: MySQL via /api/* endpoints.
+// localStorage digunakan sebagai cache/fallback agar UI tetap responsif.
 
 // --- Select mode state ---
 let _selectMode = false;
 let _selectedIds = new Set();
 
-// --- Helper to safely get the supabase client ---
-function getClient() {
-    return window.supabaseClient || null;
+// --- Date helper for local timezone ---
+function getLocalDateString(dateObj = new Date()) {
+    const year = dateObj.getFullYear();
+    const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+    const day = String(dateObj.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
 }
 
 // --- Data helpers (localStorage as cache) ---
@@ -24,7 +27,7 @@ function saveHabitsCache(habits) {
 function getLoginDate() {
     let d = localStorage.getItem('loginDate');
     if (!d) {
-        d = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+        d = getLocalDateString(); // YYYY-MM-DD in local time
         localStorage.setItem('loginDate', d);
     }
     return d;
@@ -50,6 +53,111 @@ function setCompletion(habitId, dateStr, value) {
 function isHabitCompleted(habitId, dateStr) {
     const c = getCompletions();
     return !!(c[dateStr] && c[dateStr][habitId]);
+}
+
+// --- Statistics Helpers ---
+function getHabitStreak(habitId, todayStr) {
+    const c = getCompletions();
+    let streak = 0;
+    
+    let currentDate = new Date(todayStr);
+    
+    // Check if completed today
+    if (c[todayStr] && c[todayStr][habitId]) {
+        streak++;
+        currentDate.setDate(currentDate.getDate() - 1);
+    } else {
+        // If not completed today, maybe the streak is still alive from yesterday
+        currentDate.setDate(currentDate.getDate() - 1);
+        const yesterdayStr = getLocalDateString(currentDate);
+        if (!c[yesterdayStr] || !c[yesterdayStr][habitId]) {
+            return 0; // Not completed today or yesterday, streak is 0
+        }
+    }
+
+    // Traverse backwards
+    while (true) {
+        const dateStr = getLocalDateString(currentDate);
+        if (c[dateStr] && c[dateStr][habitId]) {
+            streak++;
+            currentDate.setDate(currentDate.getDate() - 1);
+        } else {
+            break;
+        }
+    }
+    return streak;
+}
+
+function getHabitLongestStreak(habitId) {
+    const c = getCompletions();
+    let longestStreak = 0;
+    let currentStreak = 0;
+    
+    const completedDates = Object.keys(c)
+        .filter(dateStr => c[dateStr][habitId])
+        .sort((a, b) => new Date(a) - new Date(b));
+
+    if (completedDates.length === 0) return 0;
+    
+    for (let i = 0; i < completedDates.length; i++) {
+        if (i === 0) {
+            currentStreak = 1;
+            longestStreak = 1;
+            continue;
+        }
+        const d1 = new Date(completedDates[i-1]);
+        const d2 = new Date(completedDates[i]);
+        // To avoid timezone issues crossing midnight, zero out time before diffing
+        d1.setHours(0,0,0,0);
+        d2.setHours(0,0,0,0);
+        const diffTime = Math.abs(d2 - d1);
+        const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+        
+        if (diffDays === 1) {
+            currentStreak++;
+            if (currentStreak > longestStreak) longestStreak = currentStreak;
+        } else if (diffDays > 1) {
+            currentStreak = 1;
+        }
+    }
+    return longestStreak;
+}
+
+function getMonthlyAccuracy(habitId, todayStr) {
+    const c = getCompletions();
+    const today = new Date(todayStr);
+    const year = today.getFullYear();
+    const month = today.getMonth();
+    const daysElapsed = today.getDate(); // 1 to 31
+    
+    let completedDays = 0;
+    for (let i = 1; i <= daysElapsed; i++) {
+        const d = new Date(year, month, i);
+        const dateStr = getLocalDateString(d);
+        if (c[dateStr] && c[dateStr][habitId]) {
+            completedDays++;
+        }
+    }
+    
+    return Math.round((completedDays / daysElapsed) * 100);
+}
+
+function getCurrentWeekDates(todayStr) {
+    const today = new Date(todayStr);
+    let dayOfWeek = today.getDay(); // 0 (Sun) to 6 (Sat)
+    // Adjust to make Monday = 0, Sunday = 6
+    const diffToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+    
+    const monday = new Date(today);
+    monday.setDate(today.getDate() - diffToMonday);
+    
+    const weekDates = [];
+    for (let i = 0; i < 7; i++) {
+        const d = new Date(monday);
+        d.setDate(monday.getDate() + i);
+        weekDates.push(getLocalDateString(d));
+    }
+    return weekDates;
 }
 
 // --- Numeric value tracking (per habit per date) ---
@@ -93,183 +201,127 @@ function formatTime(totalSeconds) {
     return h > 0 ? `${pad(h)}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
 }
 
-// --- Supabase Upsert for habit_logs ---
+// --- MySQL Upsert untuk habit_logs (menggantikan Supabase upsertHabitLog) ---
+// Memanggil toggleHabitLogMySQL dari mysql-api.js jika tersedia.
+// Dipanggil saat: setCompletion(), setNumericValue(), timer pause.
 async function upsertHabitLog(habitId, dateStr, fields) {
-    const client = getClient();
-    if (!client) return;
-    try {
-        const { data: { session } } = await client.auth.getSession();
-        if (!session) return;
-
-        const payload = {
-            user_id: session.user.id,
-            habit_id: habitId,
-            log_date: dateStr,
-            updated_at: new Date().toISOString(),
-            ...fields
-        };
-
-        await client.from('habit_logs').upsert(payload, {
-            onConflict: 'habit_id,log_date'
-        });
-    } catch (err) {
-        console.error('habit_logs upsert error:', err);
+    // Jika mysql-api.js belum dimuat, skip (offline mode)
+    if (typeof toggleHabitLogMySQL !== 'function') return;
+    // Hanya toggle jika field 'completed' ada
+    if (fields && typeof fields.completed !== 'undefined') {
+        try {
+            await toggleHabitLogMySQL(habitId, dateStr);
+        } catch (err) {
+            console.warn('upsertHabitLog (MySQL) warning:', err);
+        }
     }
 }
 
-// --- Supabase Sync: Fetch habits and logs on page load ---
+// --- Sync habits dari MySQL (menggantikan syncHabitsFromSupabase) ---
+// Mengambil semua habit + log untuk tanggal tertentu via GET /api/habits-with-logs
 async function syncHabitsFromSupabase() {
-    const client = getClient();
-    if (!client) return;
+    // Cek apakah mysql-api.js tersedia dan user sudah login MySQL
+    if (typeof fetchHabitsWithLogs !== 'function') {
+        console.warn('mysql-api.js belum dimuat, skip sync.');
+        return;
+    }
+    if (typeof getMysqlUserId !== 'function' || !getMysqlUserId()) {
+        console.warn('User tidak login MySQL, skip sync.');
+        return;
+    }
 
+    const today = getLocalDateString();
     try {
-        const { data: { session } } = await client.auth.getSession();
-        if (!session) return;
+        const result = await fetchHabitsWithLogs(today);
+        if (!result.success) return;
 
-        // Fetch habits from user_habits
-        const { data: habits, error } = await client
-            .from('user_habits')
-            .select('*')
-            .eq('user_id', session.user.id)
-            .order('created_at', { ascending: true });
-
-        if (error) {
-            console.error('Error fetching habits:', error);
-            return;
-        }
-
-        // Transform to app format and cache in localStorage
-        const appHabits = (habits || []).map(h => ({
-            id: h.id,
-            name: h.name,
-            goals: h.goals || '',
-            description: h.description || '',
-            category: h.category || 'study',
-            iconHtml: h.icon_html || '<i class="fa-solid fa-star"></i>',
-            evaluation: h.evaluation || 'checklist',
-            unit: h.unit || ''
+        // Transform ke format cache lokal
+        const appHabits = result.habits.map(h => ({
+            id         : h.habit_id,
+            name       : h.habit_name,
+            description: h.habit_description || '',
+            category   : h.habit_category || 'other',
+            iconHtml   : '<i class="fa-solid fa-star"></i>',
+            evaluation : 'checklist',
+            unit       : ''
         }));
-
         saveHabitsCache(appHabits);
 
-        // Fetch habit_logs for completions
-        const { data: logs, error: logsError } = await client
-            .from('habit_logs')
-            .select('*')
-            .eq('user_id', session.user.id);
-
-        if (logsError) {
-            console.error('Error fetching habit logs:', logsError);
-            return;
-        }
-
-        // Build completions, numeric values, and timer elapsed from logs
-        const completions = {};
-        const numericValues = {};
-        const timerStates = getTimerStates(); // preserve running state
-
-        (logs || []).forEach(log => {
-            const dateStr = log.log_date;
-            if (!completions[dateStr]) completions[dateStr] = {};
-            if (!numericValues[dateStr]) numericValues[dateStr] = {};
-
-            completions[dateStr][log.habit_id] = log.completed;
-
-            if (log.numeric_value > 0) {
-                numericValues[dateStr][log.habit_id] = log.numeric_value;
-            }
-
-            if (log.timer_elapsed > 0) {
-                // Only set elapsed from DB if timer isn't currently running locally
-                if (!timerStates[log.habit_id] || !timerStates[log.habit_id].running) {
-                    timerStates[log.habit_id] = {
-                        running: false,
-                        elapsed: log.timer_elapsed,
-                        lastTick: null
-                    };
-                }
-            }
+        // Build completions dari status log
+        const completions = getCompletions();
+        result.habits.forEach(h => {
+            if (!completions[today]) completions[today] = {};
+            completions[today][h.habit_id] = (h.status === 'Completed');
         });
-
         localStorage.setItem('completions', JSON.stringify(completions));
-        localStorage.setItem('numericValues', JSON.stringify(numericValues));
-        saveTimerStates(timerStates);
 
         return appHabits;
     } catch (err) {
-        console.error('syncHabitsFromSupabase error:', err);
+        console.warn('syncHabitsFromSupabase (MySQL mode) error:', err);
     }
 }
 
-// --- Add habit to Supabase (returns the Supabase UUID) ---
+// --- Tambah habit ke MySQL (menggantikan addHabitToSupabase) ---
 async function addHabitToSupabase(habitData) {
-    const client = getClient();
-    if (!client) return null;
+    if (typeof getMysqlUserId !== 'function') return null;
+    const userId = getMysqlUserId();
+    if (!userId) return null;
 
     try {
-        const { data: { session } } = await client.auth.getSession();
-        if (!session) return null;
-
-        const { data, error } = await client.from('user_habits').insert({
-            user_id: session.user.id,
-            name: habitData.name,
-            goals: habitData.goals,
-            description: habitData.description,
-            category: habitData.category,
-            icon_html: habitData.iconHtml,
-            evaluation: habitData.evaluation,
-            unit: habitData.unit || ''
-        }).select('id').single();
-
-        if (error) {
-            console.error('Supabase habit insert error:', error);
-            return null;
-        }
-
-        return data.id; // Return the Supabase UUID
+        const response = await fetch('http://localhost:3000/api/habits', {
+            method : 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-User-Id': userId },
+            body   : JSON.stringify({
+                name       : habitData.name,
+                description: habitData.description || '',
+                category   : habitData.category || 'other'
+            })
+        });
+        const result = await response.json();
+        if (result.success) return result.habitId; // MySQL auto-increment ID
+        console.error('addHabitToSupabase (MySQL) error:', result.message);
+        return null;
     } catch (err) {
         console.error('addHabitToSupabase error:', err);
         return null;
     }
 }
 
-// --- Update habit in Supabase ---
+// --- Update habit di MySQL (menggantikan updateHabitInSupabase) ---
 async function updateHabitInSupabase(habitId, habitData) {
-    const client = getClient();
-    if (!client) return;
+    if (typeof getMysqlUserId !== 'function') return;
+    const userId = getMysqlUserId();
+    if (!userId) return;
 
     try {
-        const { data: { session } } = await client.auth.getSession();
-        if (!session) return;
-
-        await client.from('user_habits').update({
-            name: habitData.name,
-            goals: habitData.goals,
-            description: habitData.description,
-            category: habitData.category,
-            icon_html: habitData.iconHtml,
-            evaluation: habitData.evaluation,
-            unit: habitData.unit || '',
-            updated_at: new Date().toISOString()
-        }).eq('id', habitId).eq('user_id', session.user.id);
+        await fetch(`http://localhost:3000/api/habits/${habitId}`, {
+            method : 'PUT',
+            headers: { 'Content-Type': 'application/json', 'X-User-Id': userId },
+            body   : JSON.stringify({
+                name       : habitData.name,
+                description: habitData.description || '',
+                category   : habitData.category || 'other'
+            })
+        });
     } catch (err) {
         console.error('updateHabitInSupabase error:', err);
     }
 }
 
-// --- Delete habits from Supabase ---
+// --- Hapus habit dari MySQL (menggantikan deleteHabitsFromSupabase) ---
 async function deleteHabitsFromSupabase(habitIds) {
-    const client = getClient();
-    if (!client) return;
+    if (typeof getMysqlUserId !== 'function') return;
+    const userId = getMysqlUserId();
+    if (!userId) return;
 
     try {
-        const { data: { session } } = await client.auth.getSession();
-        if (!session) return;
-
-        await client.from('user_habits')
-            .delete()
-            .eq('user_id', session.user.id)
-            .in('id', habitIds);
+        // Hapus satu per satu (MySQL tidak support batch delete via REST sederhana)
+        await Promise.all(habitIds.map(id =>
+            fetch(`http://localhost:3000/api/habits/${id}`, {
+                method : 'DELETE',
+                headers: { 'X-User-Id': userId }
+            })
+        ));
     } catch (err) {
         console.error('deleteHabitsFromSupabase error:', err);
     }
@@ -302,7 +354,7 @@ function renderHomeHabits() {
     if (!container) return;
 
     const habits = getHabits();
-    const today = new Date().toISOString().slice(0, 10);
+    const today = getLocalDateString();
 
     if (habits.length === 0) {
         container.innerHTML = `
@@ -316,106 +368,86 @@ function renderHomeHabits() {
         return;
     }
 
-    let html = '';
-    habits.forEach((habit, idx) => {
-        const completed = isHabitCompleted(habit.id, today);
-        const delay = 0.3 + idx * 0.05;
-
-        if (habit.evaluation === 'timer') {
-            html += buildTimerCard(habit, completed, delay, today);
-        } else if (habit.evaluation === 'numeric') {
-            html += buildNumericCard(habit, completed, delay, today);
-        } else {
-            html += buildChecklistCard(habit, completed, delay, today);
-        }
+    // Calculate stats and sort by streak descending
+    const habitsWithStats = habits.map(habit => {
+        const streak = getHabitStreak(habit.id, today);
+        const accuracy = getMonthlyAccuracy(habit.id, today);
+        return { ...habit, streak, accuracy };
     });
+    
+    habitsWithStats.sort((a, b) => b.streak - a.streak);
+
+    const weekDates = getCurrentWeekDates(today);
+    const c = getCompletions();
+
+    let html = `
+    <div class="bg-white rounded-2xl p-4 shadow-sm w-full max-w-md mx-auto overflow-y-auto max-h-[60vh] no-scrollbar">
+        <div class="flex flex-col gap-4">
+    `;
+
+    habitsWithStats.forEach((habit, idx) => {
+        const completedToday = isHabitCompleted(habit.id, today);
+        const delay = 0.1 + idx * 0.05;
+        const catColor = getCategoryColor(habit.category);
+
+        // Build Weekly Dots
+        let dotsHtml = '<div class="flex items-center gap-1.5">';
+        weekDates.forEach(dateStr => {
+            const isDone = !!(c[dateStr] && c[dateStr][habit.id]);
+            const dotClass = isDone ? 'bg-emerald-500' : 'bg-gray-200';
+            dotsHtml += `<div class="w-2.5 h-2.5 rounded-full ${dotClass}"></div>`;
+        });
+        dotsHtml += '</div>';
+
+        // Action Button
+        const checkedClasses = completedToday ? 'bg-[var(--primary)] text-white border-[var(--primary)]' : 'border-gray-300 text-gray-300';
+        const iconVisibility = completedToday ? 'visible' : 'invisible';
+        
+        const actionHtml = `
+            <button class="home-check w-8 h-8 rounded-full border-2 flex items-center justify-center transition-colors ${checkedClasses}" data-id="${habit.id}" data-date="${today}">
+                <i class="fa-solid fa-check text-xs ${iconVisibility}"></i>
+            </button>
+        `;
+
+        html += `
+        <div class="flex items-center justify-between gap-2" style="animation: fade-in-up 0.4s ease-out forwards; animation-delay: ${delay}s; opacity: 0;">
+            <!-- Left: Info & Streak -->
+            <div class="flex items-center gap-3 min-w-0 flex-1">
+                <div class="w-10 h-10 rounded-xl flex items-center justify-center text-lg shrink-0 ${catColor.bg} ${catColor.text}">
+                    ${habit.iconHtml || '<i class="fa-solid fa-star"></i>'}
+                </div>
+                <div class="min-w-0">
+                    <h3 class="font-bold text-sm text-gray-800 truncate">${habit.name}</h3>
+                    <div class="flex items-center gap-1.5 text-[10px] font-medium text-gray-500 mt-0.5">
+                        <span class="flex items-center gap-1 text-orange-500"><i class="fa-solid fa-fire"></i> ${habit.streak} Days</span>
+                        <span class="text-gray-300">|</span>
+                        <span>${habit.accuracy}%</span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Center: Weekly History -->
+            <div class="shrink-0">
+                ${dotsHtml}
+            </div>
+
+            <!-- Right: Action Button -->
+            <div class="shrink-0 pl-1">
+                ${actionHtml}
+            </div>
+        </div>
+        `;
+    });
+
+    html += `
+        </div>
+    </div>
+    `;
 
     container.innerHTML = html;
 
     // Attach event listeners
     attachHomeCardListeners(today);
-    // Start ticking any running timers
-    startHomeTimerTicks();
-}
-
-function buildSelectCircle(habitId) {
-    const sel = _selectedIds.has(habitId);
-    return `<div class="sel-circle w-7 h-7 rounded-full border-2 border-white/80 flex items-center justify-center shrink-0 transition-all ${sel ? 'bg-white' : ''}" style="pointer-events:none;">${sel ? '<i class="fa-solid fa-check text-xs" style="color:var(--primary)"></i>' : ''}</div>`;
-}
-
-function buildChecklistCard(habit, completed, delay, dateStr) {
-    const checkedClasses = completed ? 'bg-white text-[var(--primary)]' : 'opacity-50';
-    const iconVisibility = completed ? 'visible' : 'invisible';
-    const cardClick = _selectMode ? `onclick="toggleHabitSelection('${habit.id}')" style="cursor:pointer;"` : '';
-    const selRing = (_selectMode && _selectedIds.has(habit.id)) ? 'ring-2 ring-white ring-offset-1 ring-offset-[var(--primary)]' : '';
-
-    const rightArea = _selectMode
-        ? buildSelectCircle(habit.id)
-        : `<div class="flex items-center gap-3">
-            <button class="check-btn home-check w-9 h-9 rounded-full border-2 border-white flex items-center justify-center hover:bg-white hover:text-[var(--primary)] transition-colors ${checkedClasses}" data-id="${habit.id}" data-date="${dateStr}"><i class="fa-solid fa-check ${iconVisibility}"></i></button>
-            <button class="text-white opacity-80 h-10 px-2 flex flex-col justify-center gap-1 home-delete" data-id="${habit.id}"><span class="w-1 h-1 bg-white rounded-full"></span><span class="w-1 h-1 bg-white rounded-full"></span><span class="w-1 h-1 bg-white rounded-full"></span></button>
-           </div>`;
-
-    return `
-    <div class="habit-card rounded-2xl p-4 flex items-center justify-between text-white shadow-[0_4px_14px_0_rgba(16,185,129,0.39)] ${selRing}" style="animation-delay:${delay}s" data-habit-id="${habit.id}" ${cardClick}>
-        <div class="flex items-center gap-4">
-            <div class="w-10 h-10 border-2 border-white/80 rounded-full flex items-center justify-center text-xl shrink-0">${habit.iconHtml || '<i class="fa-solid fa-star"></i>'}</div>
-            <div><h3 class="font-bold text-base w-32 truncate">${habit.name}</h3><p class="text-xs font-medium text-white/90">${habit.goals || ''}</p></div>
-        </div>
-        ${rightArea}
-    </div>`;
-}
-
-function buildNumericCard(habit, completed, delay, dateStr) {
-    const value = getNumericValue(habit.id, dateStr);
-    const circleFilled = value > 0 ? 'bg-white text-[var(--primary)]' : '';
-    const cardClick = _selectMode ? `onclick="toggleHabitSelection('${habit.id}')" style="cursor:pointer;"` : '';
-    const selRing = (_selectMode && _selectedIds.has(habit.id)) ? 'ring-2 ring-white ring-offset-1 ring-offset-[var(--primary)]' : '';
-
-    const rightArea = _selectMode
-        ? buildSelectCircle(habit.id)
-        : `<div class="flex items-center gap-2">
-            <div class="flex flex-col gap-0.5">
-                <button class="numeric-plus w-5 h-5 rounded-full border border-white/70 flex items-center justify-center hover:bg-white hover:text-[var(--primary)] transition-colors" data-id="${habit.id}" data-date="${dateStr}"><i class="fa-solid fa-plus" style="font-size:8px;"></i></button>
-                <button class="numeric-minus w-5 h-5 rounded-full border border-white/70 flex items-center justify-center hover:bg-white hover:text-[var(--primary)] transition-colors" data-id="${habit.id}" data-date="${dateStr}"><i class="fa-solid fa-minus" style="font-size:8px;"></i></button>
-            </div>
-            <div class="w-9 h-9 rounded-full border-2 border-white flex items-center justify-center ${circleFilled} transition-colors">
-                <input type="number" class="numeric-input w-7 h-7 bg-transparent text-center font-bold text-xs focus:outline-none" style="-moz-appearance:textfield;appearance:textfield;color:inherit;" value="${value}" min="0" data-id="${habit.id}" data-date="${dateStr}">
-            </div>
-            <button class="text-white opacity-80 h-10 px-1 ml-1 flex flex-col justify-center gap-1 home-delete" data-id="${habit.id}"><span class="w-1 h-1 bg-white rounded-full"></span><span class="w-1 h-1 bg-white rounded-full"></span><span class="w-1 h-1 bg-white rounded-full"></span></button>
-           </div>`;
-
-    return `
-    <div class="habit-card rounded-2xl p-4 flex items-center justify-between text-white shadow-[0_4px_14px_0_rgba(16,185,129,0.39)] ${selRing}" style="animation-delay:${delay}s" data-habit-id="${habit.id}" ${cardClick}>
-        <div class="flex items-center gap-4">
-            <div class="w-10 h-10 border-2 border-white/80 rounded-full flex items-center justify-center text-xl shrink-0">${habit.iconHtml || '<i class="fa-solid fa-hashtag"></i>'}</div>
-            <div><h3 class="font-bold text-base w-24 sm:w-32 truncate">${habit.name}</h3><p class="text-xs font-medium text-white/90">${habit.goals || ''}</p></div>
-        </div>
-        ${rightArea}
-    </div>`;
-}
-
-function buildTimerCard(habit, completed, delay, dateStr) {
-    const ts = getTimerStates();
-    const state = ts[habit.id] || { running: false, elapsed: 0 };
-    const cardClick = _selectMode ? `onclick="toggleHabitSelection('${habit.id}')" style="cursor:pointer;"` : '';
-    const selRing = (_selectMode && _selectedIds.has(habit.id)) ? 'ring-2 ring-white ring-offset-1 ring-offset-[var(--primary)]' : '';
-
-    const rightArea = _selectMode
-        ? buildSelectCircle(habit.id)
-        : `<div class="flex items-center gap-3">
-            <button class="home-timer-btn w-9 h-9 rounded-full border-2 border-white flex items-center justify-center hover:bg-white hover:text-[var(--primary)] transition-colors ${state.running ? 'bg-white text-[var(--primary)]' : ''}" data-id="${habit.id}" data-date="${dateStr}"><i class="fa-solid ${state.running ? 'fa-pause' : 'fa-play'} text-sm"></i></button>
-            <button class="text-white opacity-80 h-10 px-2 flex flex-col justify-center gap-1 home-delete" data-id="${habit.id}"><span class="w-1 h-1 bg-white rounded-full"></span><span class="w-1 h-1 bg-white rounded-full"></span><span class="w-1 h-1 bg-white rounded-full"></span></button>
-           </div>`;
-
-    return `
-    <div class="habit-card rounded-2xl p-4 flex items-center justify-between text-white shadow-[0_4px_14px_0_rgba(16,185,129,0.39)] ${selRing}" style="animation-delay:${delay}s" data-habit-id="${habit.id}" ${cardClick}>
-        <div class="flex items-center gap-4">
-            <div class="w-10 h-10 border-2 border-white/80 rounded-full flex items-center justify-center text-xl shrink-0">${habit.iconHtml || '<i class="fa-solid fa-stopwatch"></i>'}</div>
-            <div><h3 class="font-bold text-base w-32 truncate">${habit.name}</h3><p class="text-xs font-medium text-white/90 timer-display" data-timer-id="${habit.id}">${formatTime(state.elapsed)}</p></div>
-        </div>
-        ${rightArea}
-    </div>`;
 }
 
 function attachHomeCardListeners(dateStr) {
@@ -567,7 +599,7 @@ function renderHomeDateRedDots() {
         const dateStr = card.dataset.date;
         if (!dateStr) return;
         // Only for dates >= loginDate and <= today
-        const today = new Date().toISOString().slice(0, 10);
+        const today = getLocalDateString();
         if (dateStr < loginDate || dateStr > today) {
             // Remove dot if exists
             const existingDot = card.querySelector('.red-dot');
@@ -592,15 +624,42 @@ function renderHomeDateRedDots() {
 // =============================================
 // CALENDAR PAGE — render habit list for selected date & red dots
 // =============================================
+// Action helper for checking habit in calendar
+window.toggleCalendarCompletion = function(habitId, dateStr, newValue) {
+    if (!dateStr || dateStr === 'undefined') {
+        console.error("Invalid dateStr in toggleCalendarCompletion");
+        return;
+    }
+    setCompletion(habitId, dateStr, newValue);
+    // Re-render Calendar to update dots and habit list
+    if (typeof renderCalendarFull === 'function') {
+        renderCalendarFull();
+    }
+}
+
+window.deleteHabitFromCalendar = async function(habitId) {
+    // Optimistic cache update
+    let habits = getHabits();
+    habits = habits.filter(h => h.id !== habitId);
+    saveHabitsCache(habits);
+    
+    // Supabase delete
+    await deleteHabitsFromSupabase([habitId]);
+    
+    // Re-render
+    if (typeof renderCalendarFull === 'function') {
+        renderCalendarFull();
+    }
+}
+
 function renderCalendarHabits(dateStr) {
     const container = document.getElementById('calendar-habit-list');
     if (!container) return;
 
     const habits = getHabits();
     const completions = getCompletions();
-    const theme = document.documentElement.getAttribute('data-theme') || 'green';
+    const theme = document.documentElement.getAttribute('data-theme') || 'light';
     const primaryColor = theme === 'blue' ? '#5BA4C9' : '#10B981';
-    const lightColor = theme === 'blue' ? '#E0F2FE' : '#D1FAE5';
 
     if (habits.length === 0) {
         container.innerHTML = `
@@ -611,74 +670,85 @@ function renderCalendarHabits(dateStr) {
         return;
     }
 
-    let html = '';
+    let html = `
+    <div class="overflow-x-auto overflow-y-auto max-h-[55vh] bg-white rounded-xl shadow-sm border border-gray-200 no-scrollbar relative">
+        <table class="w-full text-left border-collapse">
+            <thead class="sticky top-0 bg-gray-50 z-10 shadow-sm">
+                <tr class="border-b border-gray-200 text-[10px] text-gray-500 uppercase tracking-wider">
+                    <th class="px-4 py-3 font-bold bg-gray-50">Habit</th>
+                    <th class="px-4 py-3 font-bold hidden sm:table-cell bg-gray-50">Deskripsi</th>
+                    <th class="px-4 py-3 font-bold bg-gray-50">Status</th>
+                    <th class="px-4 py-3 font-bold text-center bg-gray-50">Aksi</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+    `;
+
     habits.forEach(habit => {
         const completed = isHabitCompleted(habit.id, dateStr);
-        const catColor = getCategoryColor(habit.category);
+
+        let statusText = '';
+        let statusColor = '';
 
         if (habit.evaluation === 'timer') {
             const ts = getTimerStates();
             const state = ts[habit.id] || { elapsed: 0 };
             const timeStr = formatTime(state.elapsed);
-
-            html += `
-            <div class="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 flex items-center justify-between ${completed ? '' : 'opacity-70'}">
-                <div class="flex items-center gap-3 min-w-0 flex-1">
-                    <div class="w-10 h-10 rounded-full flex items-center justify-center text-lg shrink-0" style="background-color: ${completed ? lightColor : '#F3F4F6'}; color: ${completed ? primaryColor : '#6B7280'};">
-                        ${habit.iconHtml || '<i class="fa-solid fa-stopwatch"></i>'}
-                    </div>
-                    <div class="min-w-0">
-                        <h4 class="font-bold text-sm text-gray-900 truncate">${habit.name}</h4>
-                        ${habit.description ? `<p class="text-xs text-gray-400 mt-0.5 truncate max-w-[180px]">${habit.description}</p>` : ''}
-                        <p class="text-xs font-medium mt-0.5" style="color: ${completed ? primaryColor : '#6B7280'}">
-                            <i class="fa-solid fa-stopwatch mr-1"></i>${timeStr} ${completed ? '— Done' : '— Pending'}
-                        </p>
-                    </div>
-                </div>
-                ${completed
-                    ? `<i class="fa-solid fa-circle-check text-xl shrink-0" style="color: ${primaryColor}"></i>`
-                    : `<i class="fa-regular fa-circle text-gray-300 text-xl shrink-0"></i>`
-                }
-            </div>`;
+            statusText = completed ? `Done (${timeStr})` : `Pending (${timeStr})`;
+            statusColor = completed ? 'text-green-600 bg-green-50' : 'text-yellow-600 bg-yellow-50';
         } else if (habit.evaluation === 'numeric') {
             const numVal = getNumericValue(habit.id, dateStr);
-            html += `
-            <div class="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 flex items-center justify-between ${numVal > 0 ? '' : 'opacity-70'}">
-                <div class="flex items-center gap-3 min-w-0 flex-1">
-                    <div class="w-10 h-10 rounded-full flex items-center justify-center text-lg shrink-0" style="background-color: ${numVal > 0 ? lightColor : '#F3F4F6'}; color: ${numVal > 0 ? primaryColor : '#6B7280'};">
-                        ${habit.iconHtml || '<i class="fa-solid fa-hashtag"></i>'}
-                    </div>
-                    <div class="min-w-0">
-                        <h4 class="font-bold text-sm text-gray-900 truncate">${habit.name}</h4>
-                        ${habit.description ? `<p class="text-xs text-gray-400 mt-0.5 truncate max-w-[160px]">${habit.description}</p>` : ''}
-                        <p class="text-xs font-medium mt-0.5" style="color: ${numVal > 0 ? primaryColor : '#6B7280'}">${numVal > 0 ? 'Completed' : 'Not completed'}</p>
-                    </div>
-                </div>
-                ${numVal > 0
-                    ? `<i class="fa-solid fa-circle-check text-xl shrink-0" style="color: ${primaryColor}"></i>`
-                    : `<i class="fa-regular fa-circle-xmark text-gray-400 text-xl shrink-0"></i>`
-                }
-            </div>`;
+            const isDone = numVal > 0;
+            statusText = isDone ? 'Completed' : 'Not completed';
+            statusColor = isDone ? 'text-green-600 bg-green-50' : 'text-gray-500 bg-gray-50';
         } else {
-            html += `
-            <div class="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 flex items-center justify-between ${completed ? '' : 'opacity-70'}">
-                <div class="flex items-center gap-3 min-w-0 flex-1">
-                    <div class="w-10 h-10 rounded-full flex items-center justify-center text-lg shrink-0" style="background-color: ${completed ? lightColor : '#F3F4F6'}; color: ${completed ? primaryColor : '#6B7280'};">
-                        ${habit.iconHtml || '<i class="fa-solid fa-star"></i>'}
-                    </div>
-                    <div class="min-w-0">
-                        <h4 class="font-bold text-sm text-gray-900 truncate">${habit.name}</h4>
-                        ${habit.description ? `<p class="text-xs text-gray-400 mt-0.5 truncate max-w-[180px]">${habit.description}</p>` : ''}
-                        <p class="text-xs font-medium mt-0.5" style="color: ${completed ? primaryColor : '#6B7280'}">${completed ? 'Completed ✓' : 'Not completed'}</p>
-                    </div>
-                </div>
-                ${completed
-                    ? `<i class="fa-solid fa-circle-check text-xl shrink-0" style="color: ${primaryColor}"></i>`
-                    : `<i class="fa-regular fa-circle-xmark text-gray-400 text-xl shrink-0"></i>`
-                }
-            </div>`;
+            statusText = completed ? 'Completed ✓' : 'Not completed';
+            statusColor = completed ? 'text-green-600 bg-green-50' : 'text-gray-500 bg-gray-50';
         }
+
+        let checkAction = `
+            <button class="w-8 h-8 rounded-full flex items-center justify-center border transition-colors ${completed ? 'bg-[var(--primary)] text-white border-[var(--primary)] theme-bg-update' : 'border-gray-300 text-gray-300 hover:border-[var(--primary)] hover:text-[var(--primary)] theme-text-update'}"
+                onclick="event.stopPropagation(); toggleCalendarCompletion('${habit.id}', '${dateStr}', ${!completed})">
+                <i class="fa-solid fa-check text-xs ${completed ? 'visible' : 'invisible'}"></i>
+            </button>
+        `;
+
+        html += `
+            <tr class="hover:bg-gray-50/50 transition-colors group ${completed ? '' : 'opacity-90'}">
+                <td class="px-4 py-3">
+                    <div class="flex items-center gap-3">
+                        <div class="w-8 h-8 rounded-lg flex items-center justify-center text-sm shrink-0 bg-gray-100 text-gray-600">
+                            ${habit.iconHtml || '<i class="fa-solid fa-star"></i>'}
+                        </div>
+                        <span class="font-bold text-sm text-gray-900 w-24 sm:w-auto truncate">${habit.name}</span>
+                    </div>
+                </td>
+                <td class="px-4 py-3 text-xs text-gray-500 max-w-[120px] truncate hidden sm:table-cell">
+                    ${habit.description || '-'}
+                </td>
+                <td class="px-4 py-3">
+                    <span class="inline-flex items-center px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider ${statusColor}">
+                        ${statusText}
+                    </span>
+                </td>
+                <td class="px-4 py-3">
+                    <div class="flex items-center justify-center gap-2">
+                        ${checkAction}
+                        <button class="w-8 h-8 rounded-full flex items-center justify-center text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+                            onclick="event.stopPropagation(); showConfirmModal('Hapus Habit', 'Yakin ingin menghapus habit ini?', 'Hapus', 'bg-red-500 hover:bg-red-600', () => deleteHabitFromCalendar('${habit.id}'))">
+                            <i class="fa-regular fa-trash-can text-xs"></i>
+                        </button>
+                    </div>
+                </td>
+            </tr>
+        `;
     });
+
+    html += `
+            </tbody>
+        </table>
+    </div>
+    `;
 
     container.innerHTML = html;
 }
@@ -690,7 +760,7 @@ function renderCalendarRedDots() {
 
     const loginDate = getLoginDate();
     const completions = getCompletions();
-    const today = new Date().toISOString().slice(0, 10);
+    const today = getLocalDateString();
 
     document.querySelectorAll('.calendar-day[data-date]').forEach(dayEl => {
         const dateStr = dayEl.dataset.date;
@@ -903,3 +973,39 @@ window.toggleHabitSelection = toggleHabitSelection;
 window.confirmDeletion = confirmDeletion;
 window.closeDeleteModal = closeDeleteModal;
 window.executeDeletion = executeDeletion;
+
+// =============================================
+// ACHIEVEMENTS LOGIC
+// =============================================
+function getAchievementsData() {
+    const habits = getHabits();
+    const completions = getCompletions();
+    const stats = getStatsData('daily');
+    
+    let totalCompletions = 0;
+    for (const date in completions) {
+        totalCompletions += Object.keys(completions[date]).length;
+    }
+    
+    const achievements = [
+        { id: 1, name: 'First Step', description: 'Create your first habit', isUnlocked: habits.length >= 1, progress: Math.min(habits.length, 1), target: 1 },
+        { id: 2, name: 'Getting Started', description: 'Complete a habit for the first time', isUnlocked: totalCompletions >= 1, progress: Math.min(totalCompletions, 1), target: 1 },
+        { id: 3, name: 'Three\'s a Charm', description: 'Reach a 3-day streak', isUnlocked: stats.longestStreak >= 3, progress: Math.min(stats.longestStreak, 3), target: 3 },
+        { id: 4, name: 'Habit Builder', description: 'Create 5 habits', isUnlocked: habits.length >= 5, progress: Math.min(habits.length, 5), target: 5 },
+        { id: 5, name: 'One Week Strong', description: 'Reach a 7-day streak', isUnlocked: stats.longestStreak >= 7, progress: Math.min(stats.longestStreak, 7), target: 7 },
+        { id: 6, name: 'Consistency', description: 'Complete habits 10 times in total', isUnlocked: totalCompletions >= 10, progress: Math.min(totalCompletions, 10), target: 10 },
+        { id: 7, name: 'Dedicated', description: 'Reach a 14-day streak', isUnlocked: stats.longestStreak >= 14, progress: Math.min(stats.longestStreak, 14), target: 14 },
+        { id: 8, name: 'Half Century', description: 'Complete habits 50 times in total', isUnlocked: totalCompletions >= 50, progress: Math.min(totalCompletions, 50), target: 50 },
+        { id: 9, name: 'True Master', description: 'Reach a 30-day streak', isUnlocked: stats.longestStreak >= 30, progress: Math.min(stats.longestStreak, 30), target: 30 },
+        { id: 10, name: 'Century Club', description: 'Complete habits 100 times in total', isUnlocked: totalCompletions >= 100, progress: Math.min(totalCompletions, 100), target: 100 }
+    ];
+    
+    const unlockedCount = achievements.filter(a => a.isUnlocked).length;
+    
+    return {
+        achievements,
+        unlockedCount,
+        totalCount: achievements.length
+    };
+}
+window.getAchievementsData = getAchievementsData;

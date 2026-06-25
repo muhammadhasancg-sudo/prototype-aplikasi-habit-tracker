@@ -1,33 +1,46 @@
-// Set up Supabase Client
-const SUPABASE_URL = 'https://loovtbdzjgpqamhssnue.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imxvb3Z0YmR6amdwcWFtaHNzbnVlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUyMDI3MTcsImV4cCI6MjA5MDc3ODcxN30.StgTqDRbsasnEq7gfnkF4P1bZTaV8pf3BmPIhUPFI4Q';
-// Ensure Supabase JS CDN is loaded in HTML before app.js
-const supabaseClient = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
+// ================================================================
+// app.js — HabitFlow Frontend Core
+// Auth: MySQL backend (http://localhost:3000) + localStorage session
+// Supabase: DIHAPUS TOTAL — migrasi ke Full Custom Backend
+// ================================================================
+
+// Stub agar kode lama yang masih referensikan supabaseClient tidak crash
+const supabaseClient = null;
 
 // Initialize theme
 function initTheme() {
-    // Default to green if not set
-    const savedTheme = localStorage.getItem('theme') || 'green';
-    document.documentElement.setAttribute('data-theme', savedTheme);
-    
-    // Setup background gradient immediately
-    setupBackgroundGradient(savedTheme);
+    const isAdminPage = window.location.pathname.toLowerCase().includes('admin_dashboard.html');
 
-    // Dispatch event for other scripts
-    document.dispatchEvent(new CustomEvent('themeChanged', { detail: { theme: savedTheme } }));
+    if (isAdminPage) {
+        // Admin theme handling (defaults to dark)
+        const savedTheme = localStorage.getItem('admin_theme') || 'dark';
+        document.documentElement.setAttribute('data-theme', savedTheme);
+        document.dispatchEvent(new CustomEvent('themeChanged', { detail: { theme: savedTheme } }));
+    } else {
+        // User theme handling (defaults to light/green, forces out of dark)
+        let savedTheme = localStorage.getItem('theme') || 'light';
+        if (savedTheme === 'dark') {
+            savedTheme = 'light';
+            localStorage.setItem('theme', 'light');
+        }
+        document.documentElement.setAttribute('data-theme', savedTheme);
+        setupBackgroundGradient(savedTheme);
+        document.dispatchEvent(new CustomEvent('themeChanged', { detail: { theme: savedTheme } }));
+    }
 }
 
 // Global dynamic background gradient setup setup
 function setupBackgroundGradient(theme) {
+    if (window.location.pathname.toLowerCase().includes('admin_dashboard.html')) return;
     let container = document.querySelector('main.flex-1.overflow-y-auto') || document.querySelector('main');
     if (!container) {
         container = document.body;
         // make sure body is relative so absolute positioning works if it's the scroll container
-        if(getComputedStyle(container).position === 'static') {
+        if (getComputedStyle(container).position === 'static') {
             container.style.position = 'relative';
         }
     }
-    
+
     // Check if it already exists
     let bgGradient = document.getElementById('theme-bg-gradient');
     if (!bgGradient) {
@@ -42,69 +55,72 @@ function setupBackgroundGradient(theme) {
             container.insertBefore(bgGradient, container.firstChild);
         }
     }
-    
+
     updateGradientColor(theme || document.documentElement.getAttribute('data-theme') || 'green');
 }
 
 function updateGradientColor(theme) {
     const bgGradient = document.getElementById('theme-bg-gradient');
     if (bgGradient) {
-         if (theme === 'blue') {
-             bgGradient.style.background = 'linear-gradient(180deg, #4480ba 0%, #acc9e6 50%, rgba(255,255,255,0) 100%)'; 
-         } else if (theme === 'navy') {
-             bgGradient.style.background = 'linear-gradient(135deg, #1A2652 0%, #3D5A9F 25%, #5B7FBD 50%, #8AAFDB 75%, rgba(138, 175, 219, 0.2) 100%)';
-         } else {
-             bgGradient.style.background = 'linear-gradient(180deg, #10B981 0%, #6ee7b7 50%, rgba(255,255,255,0) 100%)';
-         }
+        if (theme === 'dark') {
+            bgGradient.style.background = 'linear-gradient(180deg, #064E3B 0%, #111827 50%, rgba(255,255,255,0) 100%)';
+        } else if (theme === 'blue') {
+            bgGradient.style.background = 'linear-gradient(180deg, #4480ba 0%, #acc9e6 50%, rgba(255,255,255,0) 100%)';
+        } else {
+            bgGradient.style.background = 'linear-gradient(180deg, #10B981 0%, #6ee7b7 50%, rgba(255,255,255,0) 100%)';
+        }
     }
 }
 
-// Toggle theme between green, blue, and navy
+// Toggle theme between light and dark
 function toggleTheme() {
-    const currentTheme = document.documentElement.getAttribute('data-theme') || 'green';
-    let newTheme;
-    
-    if (currentTheme === 'green') {
-        newTheme = 'blue';
-    } else if (currentTheme === 'blue') {
-        newTheme = 'navy';
+    const isAdminPage = window.location.pathname.toLowerCase().includes('admin_dashboard.html');
+
+    if (isAdminPage) {
+        const currentTheme = document.documentElement.getAttribute('data-theme') || 'dark';
+        const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+        document.documentElement.setAttribute('data-theme', newTheme);
+        localStorage.setItem('admin_theme', newTheme);
+        document.dispatchEvent(new CustomEvent('themeChanged', { detail: { theme: newTheme } }));
     } else {
-        newTheme = 'green';
+        const currentTheme = document.documentElement.getAttribute('data-theme') || 'light';
+        let newTheme;
+        if (currentTheme === 'light' || currentTheme === 'green') {
+            newTheme = 'blue';
+        } else {
+            newTheme = 'green';
+        }
+        document.documentElement.setAttribute('data-theme', newTheme);
+        localStorage.setItem('theme', newTheme);
+        updateGradientColor(newTheme);
+        document.dispatchEvent(new CustomEvent('themeChanged', { detail: { theme: newTheme } }));
     }
-    
-    document.documentElement.setAttribute('data-theme', newTheme);
-    localStorage.setItem('theme', newTheme);
-    
-    updateGradientColor(newTheme);
-    
-    // Dispatch event
-    document.dispatchEvent(new CustomEvent('themeChanged', { detail: { theme: newTheme } }));
 }
 
 // Ripple effect for interactive elements
 function createRipple(event) {
     const button = event.currentTarget;
-    
+
     const circle = document.createElement('span');
     const diameter = Math.max(button.clientWidth, button.clientHeight);
     const radius = diameter / 2;
-    
+
     circle.style.width = circle.style.height = `${diameter}px`;
-    
+
     // Get click coordinates relative to button
     const rect = button.getBoundingClientRect();
     circle.style.left = `${event.clientX - rect.left - radius}px`;
     circle.style.top = `${event.clientY - rect.top - radius}px`;
     circle.classList.add('ripple');
-    
+
     // Remove existing ripples
     const ripple = button.querySelector('.ripple');
     if (ripple) {
         ripple.remove();
     }
-    
+
     button.appendChild(circle);
-    
+
     // Clean up
     setTimeout(() => {
         circle.remove();
@@ -115,7 +131,7 @@ function createRipple(event) {
 function toggleHabit(btn) {
     const isChecked = btn.querySelector('.visible') !== null;
     const icon = btn.querySelector('i');
-    
+
     if (isChecked) {
         // Uncheck
         btn.classList.add('opacity-50');
@@ -128,7 +144,7 @@ function toggleHabit(btn) {
         btn.classList.add('bg-white', 'text-[var(--primary)]');
         icon.classList.remove('invisible');
         icon.classList.add('visible');
-        
+
         // Add popping animation
         btn.style.transform = 'scale(1.2)';
         setTimeout(() => {
@@ -140,7 +156,7 @@ function toggleHabit(btn) {
 function initApp() {
     initTheme();
     renderDynamicDateSlider();
-    
+
     // Add ripple effect for a satisfying click animation to all interactive elements
     const rippleButtons = document.querySelectorAll('.fab, .nav-item, .date-card, .check-btn, button, .account-btn, .cal-day');
     rippleButtons.forEach(btn => {
@@ -152,16 +168,16 @@ function initApp() {
         btn.addEventListener('mousedown', createRipple);
         // Also support touch
         btn.addEventListener('touchstart', (e) => {
-            if(e.touches.length > 0) {
+            if (e.touches.length > 0) {
                 // Mock a click event for the ripple
                 const touch = e.touches[0];
                 e.clientX = touch.clientX;
                 e.clientY = touch.clientY;
                 createRipple(e);
             }
-        }, {passive: true});
+        }, { passive: true });
     });
-    
+
     // Setup check buttons
     const checkBtns = document.querySelectorAll('.check-btn');
     checkBtns.forEach(btn => {
@@ -170,17 +186,15 @@ function initApp() {
             toggleHabit(btn);
         });
     });
-    
-    // Setup Supabase Auth Listener
-    if (supabaseClient) {
-        setupAuthListener();
-    }
+
+    // Route protection: cek session MySQL di localStorage
+    handleRouteProtection();
 }
 
 // initHeroSlider removed — Swiper.js handles the hero slider in index.html
 
 // === Custom Toast Notification System ===
-window.showToast = function(message, type = 'success') {
+window.showToast = function (message, type = 'success') {
     let container = document.getElementById('toast-container');
     if (!container) {
         container = document.createElement('div');
@@ -191,13 +205,13 @@ window.showToast = function(message, type = 'success') {
 
     const toast = document.createElement('div');
     const isError = type === 'error';
-    
-    const theme = document.documentElement.getAttribute('data-theme') || 'green';
-    const isBlue = theme === 'blue';
-    const iconClass = isError ? 'fa-circle-exclamation text-red-500' : 'fa-circle-check ' + (isBlue ? 'text-[#5BA4C9]' : 'text-[#10B981]');
-    
+
+    const theme = document.documentElement.getAttribute('data-theme') || 'light';
+    const isDark = theme === 'dark';
+    const iconClass = isError ? 'fa-circle-exclamation text-red-500' : 'fa-circle-check ' + (isDark ? 'text-[#34D399]' : (theme === 'blue' ? 'text-[#5BA4C9]' : 'text-[#10B981]'));
+
     toast.className = 'bg-white shadow-[0_8px_24px_-4px_rgba(0,0,0,0.15)] rounded-2xl px-5 py-3.5 flex items-start gap-3.5 transform -translate-y-12 opacity-0 transition-all duration-400 cubic-bezier(0.16, 1, 0.3, 1) pointer-events-auto border border-gray-100 w-full animate-slide-down';
-    
+
     toast.innerHTML = `
         <div class="mt-0.5"><i class="fa-solid ${iconClass} text-xl shrink-0"></i></div>
         <p class="text-sm font-semibold text-gray-700 leading-snug flex-1">${message}</p>
@@ -205,7 +219,7 @@ window.showToast = function(message, type = 'success') {
     `;
 
     container.appendChild(toast);
-    
+
     requestAnimationFrame(() => {
         toast.style.transform = 'translateY(0)';
         toast.style.opacity = '1';
@@ -215,12 +229,12 @@ window.showToast = function(message, type = 'success') {
         if (!toast.isConnected) return;
         toast.style.transform = 'translateY(-12px) scale(0.95)';
         toast.style.opacity = '0';
-        setTimeout(() => toast.remove(), 400); 
-    }, 4000); 
+        setTimeout(() => toast.remove(), 400);
+    }, 4000);
 };
 
 // === Global Confirm Modal System ===
-window.showConfirmModal = function(title, message, confirmText, confirmClass, onConfirm, cancelText = 'Cancel') {
+window.showConfirmModal = function (title, message, confirmText, confirmClass, onConfirm, cancelText = 'Cancel') {
     let modal = document.getElementById('global-confirm-modal');
     if (!modal) {
         modal = document.createElement('div');
@@ -241,44 +255,45 @@ window.showConfirmModal = function(title, message, confirmText, confirmClass, on
         `;
         document.body.appendChild(modal);
     }
-    
+
     document.getElementById('g-confirm-title').textContent = title;
     document.getElementById('g-confirm-msg').textContent = message;
-    
+
     const iconContainer = document.getElementById('g-confirm-icon');
     const confirmBtn = document.getElementById('g-confirm-btn');
     const cancelBtn = document.getElementById('g-confirm-cancel');
-    
+
     cancelBtn.textContent = cancelText;
     confirmBtn.textContent = confirmText;
     confirmBtn.className = `flex-1 py-3.5 font-bold rounded-xl transition-colors text-white shadow-md focus:outline-none ${confirmClass}`;
-    
+
     if (confirmClass.includes('red')) {
         iconContainer.className = 'w-14 h-14 rounded-full bg-red-50 text-red-500 flex items-center justify-center text-2xl mb-4 mx-auto';
         iconContainer.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i>';
     } else {
-        const theme = document.documentElement.getAttribute('data-theme') || 'green';
-        const isBlue = theme === 'blue';
-        const bgCls = isBlue ? 'bg-blue-50 text-[#5BA4C9]' : 'bg-green-50 text-[#10B981]';
+        const theme = document.documentElement.getAttribute('data-theme') || 'light';
+        const isDark = theme === 'dark';
+        let bgCls = isDark ? 'bg-gray-800 text-[#34D399]' : 'bg-green-50 text-[#10B981]';
+        if (theme === 'blue') bgCls = 'bg-blue-50 text-[#5BA4C9]';
         iconContainer.className = `w-14 h-14 rounded-full flex items-center justify-center text-2xl mb-4 mx-auto ${bgCls}`;
         iconContainer.innerHTML = '<i class="fa-solid fa-circle-question"></i>';
-        
+
         if (!confirmClass.includes('bg-')) {
             confirmBtn.classList.add('theme-bg-update');
-            confirmBtn.style.backgroundColor = isBlue ? '#5BA4C9' : '#10B981';
+            confirmBtn.style.backgroundColor = theme === 'blue' ? '#5BA4C9' : '#10B981';
         }
     }
-    
+
     modal.classList.remove('opacity-0', 'pointer-events-none');
     document.getElementById('g-confirm-box').classList.remove('scale-95');
     document.getElementById('g-confirm-box').classList.add('scale-100');
-    
+
     const close = () => {
         modal.classList.add('opacity-0', 'pointer-events-none');
         document.getElementById('g-confirm-box').classList.remove('scale-100');
         document.getElementById('g-confirm-box').classList.add('scale-95');
     };
-    
+
     cancelBtn.onclick = () => close();
     confirmBtn.onclick = () => {
         close();
@@ -293,33 +308,35 @@ if (document.readyState === 'loading') {
     initApp();
 }
 
-// --- Supabase Authentication Logic --- //
+// ================================================================
+// AUTH LOGIC — Pure MySQL (Supabase telah dihapus)
+// ================================================================
 
-async function setupAuthListener() {
-    const { data: { session }, error } = await supabaseClient.auth.getSession();
-    handleRouteProtection(session);
+// Tidak ada lagi setupAuthListener() — auth state dikelola via localStorage
 
-    supabaseClient.auth.onAuthStateChange((event, session) => {
-        if (event === 'SIGNED_IN') {
-            console.log('User signed in');
-            handleRouteProtection(session);
-        } else if (event === 'SIGNED_OUT') {
-            console.log('User signed out');
-            handleRouteProtection(null);
-        }
-    });
-}
-
-function handleRouteProtection(session) {
+function handleRouteProtection() {
     const currentPath = window.location.pathname.toLowerCase();
-    const isPublicRoute = currentPath.includes('login.html') || currentPath.includes('register.html');
-    
-    if (!session && !isPublicRoute) {
-        // Not logged in and on protected page -> redirect to login
-        window.location.href = 'login.html';
-    } else if (session && isPublicRoute) {
-        // Logged in but on login/register page -> redirect to index
-        window.location.href = 'index.html';
+    const isPublicRoute = currentPath.includes('login.html')
+        || currentPath.includes('register.html')
+        || currentPath.includes('intro.html')
+        || currentPath.includes('reset-password.html');
+    const isAdminRoute = currentPath.includes('admin_dashboard.html');
+    const isAdmin = localStorage.getItem('isAdmin') === 'true';
+
+    // Session dari MySQL login (disimpan saat /api/login berhasil)
+    const mysqlUser = localStorage.getItem('currentUser');
+    const isLoggedIn = !!mysqlUser || isAdmin;
+
+    if (isAdminRoute) {
+        if (!isAdmin) window.location.href = 'login.html';
+        return;
+    }
+
+    if (!isLoggedIn && !isPublicRoute) {
+        const introSeen = localStorage.getItem('introSeen') === 'true';
+        window.location.href = introSeen ? 'login.html' : 'intro.html';
+    } else if (isLoggedIn && isPublicRoute && !isAdminRoute) {
+        window.location.href = isAdmin ? 'admin_dashboard.html' : 'index.html';
     }
 }
 
@@ -327,19 +344,107 @@ async function handleEmailLogin(event) {
     event.preventDefault();
     const btn = event.target.querySelector('button[type="submit"]');
     const originalText = btn.innerText;
+
+    // === Rate Limit Check ===
+    if (typeof loginRateLimiter !== 'undefined') {
+        const lockStatus = loginRateLimiter.isLocked();
+        if (lockStatus.isLocked) {
+            const warningEl = document.getElementById('rate-limit-warning');
+            if (warningEl) {
+                loginRateLimiter.startCountdown(warningEl, () => {
+                    btn.disabled = false;
+                    btn.innerText = originalText;
+                });
+            }
+            showToast('Account temporarily locked. Wait for countdown to finish.', 'error');
+            return;
+        }
+    }
+
+    const emailRaw = document.getElementById('email').value;
+    const passwordRaw = document.getElementById('password').value;
+
+    // === Input Sanitization ===
+    if (typeof sanitizeInput === 'function') {
+        const emailCheck = sanitizeInput(emailRaw, 'Email');
+        if (!emailCheck.isSafe) {
+            showToast('Invalid input: ' + emailCheck.threats.join(', '), 'error');
+            return;
+        }
+
+        // Validate email format
+        if (typeof isValidEmail === 'function' && !isValidEmail(emailRaw.trim())) {
+            showToast('Invalid email format.', 'error');
+            return;
+        }
+
+        // Check password for obvious injection attempts (but allow special chars for passwords)
+        const pwdThreatCheck = detectThreats(passwordRaw);
+        if (!pwdThreatCheck.isSafe) {
+            showToast('Password input contains suspicious characters.', 'error');
+            return;
+        }
+    }
+
     btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Loading...';
     btn.disabled = true;
 
-    const email = document.getElementById('email').value;
-    const password = document.getElementById('password').value;
+    const email = emailRaw.trim();
+    const password = passwordRaw;
 
-    const { data, error } = await supabaseClient.auth.signInWithPassword({
-        email: email,
-        password: password,
-    });
+    // === Admin Bypass (Hash-based) ===
+    if (typeof verifyAdminCredentials === 'function') {
+        const isAdmin = await verifyAdminCredentials(email, password);
+        if (isAdmin) {
+            localStorage.setItem('isAdmin', 'true');
+            if (typeof loginRateLimiter !== 'undefined') loginRateLimiter.reset();
+            showToast('Admin login successful!');
+            setTimeout(() => window.location.href = 'admin_dashboard.html', 500);
+            return;
+        }
+    }
 
-    if (error) {
-        showToast("Login failed: " + error.message, 'error');
+    // === Login via Node.js + MySQL ===
+    try {
+        const response = await fetch('http://localhost:3000/api/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, password })
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+            // Simpan data user ke localStorage
+            localStorage.setItem('currentUser', JSON.stringify(result.user));
+            if (typeof loginRateLimiter !== 'undefined') loginRateLimiter.reset();
+            showToast('Login berhasil! Selamat datang, ' + (result.user.username || result.user.email) + '!');
+            setTimeout(() => window.location.href = 'index.html', 800);
+        } else {
+            // === Record failed attempt for rate limiting ===
+            if (typeof loginRateLimiter !== 'undefined') {
+                const rateLimitResult = loginRateLimiter.recordFailedAttempt();
+                const warningEl = document.getElementById('rate-limit-warning');
+                if (rateLimitResult.isLocked) {
+                    showToast('Too many failed attempts. Account locked for 30 seconds.', 'error');
+                    if (warningEl) {
+                        loginRateLimiter.startCountdown(warningEl, () => {
+                            btn.disabled = false;
+                            btn.innerText = originalText;
+                        });
+                    }
+                } else {
+                    const warningMsg = loginRateLimiter.getWarningMessage();
+                    showToast('Login gagal: ' + result.message + (warningMsg ? '\n' + warningMsg : ''), 'error');
+                }
+            } else {
+                showToast('Login gagal: ' + result.message, 'error');
+            }
+            btn.innerText = originalText;
+            btn.disabled = false;
+        }
+    } catch (networkError) {
+        showToast('Tidak dapat terhubung ke server. Pastikan server berjalan.', 'error');
         btn.innerText = originalText;
         btn.disabled = false;
     }
@@ -349,56 +454,74 @@ async function handleEmailRegister(event) {
     event.preventDefault();
     const btn = event.target.querySelector('button[type="submit"]');
     const originalText = btn.innerText;
+
+    const usernameRaw = document.getElementById('username').value;
+    const nameRaw     = document.getElementById('name') ? document.getElementById('name').value : usernameRaw;
+    const emailRaw    = document.getElementById('email').value;
+    const passwordRaw = document.getElementById('password').value;
+    const confirmPasswordEl  = document.getElementById('confirm-password');
+    const confirmPasswordRaw = confirmPasswordEl ? confirmPasswordEl.value : passwordRaw;
+
+    // === Input Sanitization ===
+    if (typeof sanitizeInput === 'function') {
+        const usernameCheck = sanitizeInput(usernameRaw, 'Username');
+        const nameCheck     = sanitizeInput(nameRaw, 'Nama');
+        const emailCheck    = sanitizeInput(emailRaw, 'Email');
+        const allThreats    = [...usernameCheck.threats, ...nameCheck.threats, ...emailCheck.threats];
+        if (allThreats.length > 0) {
+            showToast('Invalid input: ' + allThreats.join(', '), 'error');
+            return;
+        }
+        if (typeof isValidEmail === 'function' && !isValidEmail(emailRaw.trim())) {
+            showToast('Invalid email format.', 'error');
+            return;
+        }
+    }
+
+    // === Password Strength ===
+    if (typeof validatePassword === 'function') {
+        const pwdResult = validatePassword(passwordRaw);
+        if (!pwdResult.isValid) {
+            showToast('Password tidak memenuhi syarat:\n• ' + pwdResult.errors.join('\n• '), 'error');
+            return;
+        }
+    }
+
+    if (passwordRaw !== confirmPasswordRaw) {
+        showToast('Password dan konfirmasi password tidak cocok!', 'error');
+        return;
+    }
+
     btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Loading...';
-    btn.disabled = true;
+    btn.disabled  = true;
 
-    const username = document.getElementById('username').value;
-    const name = document.getElementById('name').value;
-    const email = document.getElementById('email').value;
-    const password = document.getElementById('password').value;
+    try {
+        // === Register via MySQL Backend ===
+        const response = await fetch('http://localhost:3000/api/register', {
+            method : 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body   : JSON.stringify({
+                username: usernameRaw.trim(),
+                fullName: nameRaw.trim(),
+                email   : emailRaw.trim(),
+                password: passwordRaw
+            })
+        });
 
-    const { data, error } = await supabaseClient.auth.signUp({
-        email: email,
-        password: password,
-        options: {
-            data: {
-                full_name: name,
-                username: username
-            }
+        const result = await response.json();
+
+        if (result.success) {
+            showToast('Akun berhasil dibuat! Silakan login.');
+            setTimeout(() => window.location.href = 'login.html', 1000);
+        } else {
+            showToast(result.message || 'Registrasi gagal.', 'error');
+            btn.innerText = originalText;
+            btn.disabled  = false;
         }
-    });
-
-    if (error) {
-        showToast("Registration failed: " + error.message, 'error');
+    } catch (networkErr) {
+        showToast('Tidak dapat terhubung ke server. Pastikan server backend berjalan.', 'error');
         btn.innerText = originalText;
-        btn.disabled = false;
-    } else if (data.user && !data.session) {
-        // Supabase returns user but no session when email already exists (repeated signup)
-        // or when email confirmation is pending
-        showToast("This email is already registered. Please log in instead, or use 'Forgot Password'.", 'error');
-        btn.innerText = originalText;
-        btn.disabled = false;
-        setTimeout(() => window.location.href = 'login.html', 2000);
-    } else {
-        // Successful registration — user is auto-confirmed
-        if (data.user) {
-            try {
-                await supabaseClient
-                    .from('profiles')
-                    .upsert({
-                        id: data.user.id,
-                        full_name: name,
-                        username: username,
-                        email: email
-                    }, { onConflict: 'id' });
-            } catch (profileErr) {
-                console.error('Profile save error:', profileErr);
-            }
-        }
-        showToast('Account created successfully! You can now log in.');
-        btn.innerText = originalText;
-        btn.disabled = false;
-        window.location.href = 'login.html';
+        btn.disabled  = false;
     }
 }
 
@@ -406,20 +529,23 @@ async function handleEmailRegister(event) {
 
 async function handleSignOut() {
     showConfirmModal(
-        'Log Out', 
-        'Are you sure you want to log out of your account?', 
-        'Log Out', 
-        'bg-red-500 hover:bg-red-600', 
-        async () => {
+        'Log Out',
+        'Are you sure you want to log out of your account?',
+        'Log Out',
+        'bg-red-500 hover:bg-red-600',
+        () => {
             try {
                 document.body.style.opacity = '0';
                 document.body.style.transition = 'opacity 0.5s ease';
-                await supabaseClient.auth.signOut();
+                // Hapus semua session data dari localStorage
+                localStorage.removeItem('isAdmin');
+                localStorage.removeItem('currentUser');
+                // Tidak perlu call Supabase signOut lagi
                 window.location.href = 'login.html';
             } catch (error) {
                 console.error('Logout error:', error);
                 document.body.style.opacity = '1';
-                showToast("Failed to log out. Please try again.", "error");
+                showToast('Gagal logout. Coba lagi.', 'error');
             }
         }
     );
@@ -429,17 +555,17 @@ async function handleSignOut() {
 function renderDynamicDateSlider() {
     const monthContainer = document.getElementById('mobile-month-selector');
     const dateContainer = document.getElementById('mobile-date-selector');
-    
+
     if (!monthContainer || !dateContainer) return;
-    
+
     const today = new Date();
     const currentMonth = today.getMonth();
     const currentYear = today.getFullYear();
     const currentDate = today.getDate();
-    
+
     const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
     const days = ['Sun', 'Mon', 'Tues', 'Wed', 'Thu', 'Fri', 'Sat'];
-    
+
     // Render Months
     let monthHtml = '';
     months.forEach((m, i) => {
@@ -450,7 +576,7 @@ function renderDynamicDateSlider() {
         }
     });
     monthContainer.innerHTML = monthHtml;
-    
+
     // Smooth scroll month container to active month
     setTimeout(() => {
         const activeMonthBtn = document.getElementById('active-month-btn');
@@ -464,17 +590,19 @@ function renderDynamicDateSlider() {
 
     // Render Dates for current month
     renderDatesForMonth(currentYear, currentMonth, currentDate, true);
-    
+
     // Listen for theme change to update the dynamic element colors
     document.addEventListener('themeChanged', (e) => {
+        const currentTheme = e.detail.theme || document.documentElement.getAttribute('data-theme') || 'light';
+        const pColor = currentTheme === 'blue' ? '#5BA4C9' : '#10B981';
         document.querySelectorAll('.theme-bg-update').forEach(el => {
-            if(el.classList.contains('active')) {
-                el.style.backgroundColor = e.detail.theme === 'blue' ? '#5BA4C9' : '#10B981';
+            if (el.classList.contains('active')) {
+                el.style.backgroundColor = pColor;
             }
         });
         const activeMonth = document.getElementById('active-month-btn');
         if (activeMonth) {
-            activeMonth.style.backgroundColor = e.detail.theme === 'blue' ? '#5BA4C9' : '#10B981';
+            activeMonth.style.backgroundColor = pColor;
         }
     });
 }
@@ -483,21 +611,21 @@ function renderDatesForMonth(year, monthIndex, activeDateToSet = null, scroll = 
     const dateContainer = document.getElementById('mobile-date-selector');
     const days = ['Sun', 'Mon', 'Tues', 'Wed', 'Thu', 'Fri', 'Sat'];
     const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
-    
+
     let dateHtml = '';
-    const theme = document.documentElement.getAttribute('data-theme') || 'green';
+    const theme = document.documentElement.getAttribute('data-theme') || 'light';
     const primaryColor = theme === 'blue' ? '#5BA4C9' : '#10B981';
-    
+
     let activeId = '';
-    
+
     for (let i = 1; i <= daysInMonth; i++) {
         const d = new Date(year, monthIndex, i);
         const dayName = days[d.getDay()];
         const dateStr = d.toISOString().slice(0, 10);
-        
+
         let isActive = '';
         let style = '';
-        
+
         // Either set the specific active date, or default to the 1st if switching months
         if ((activeDateToSet && i === activeDateToSet) || (!activeDateToSet && i === 1)) {
             isActive = 'active theme-bg-update shadow-md text-white';
@@ -507,7 +635,7 @@ function renderDatesForMonth(year, monthIndex, activeDateToSet = null, scroll = 
             isActive = 'bg-white shadow-sm';
             style = `background-color: var(--card-bg);`;
         }
-        
+
         dateHtml += `
             <button id="slider-date-${i}" class="date-card ${isActive} min-w-[60px] h-[75px] rounded-2xl flex flex-col items-center justify-center shrink-0 focus:outline-none" style="${style}" data-date="${dateStr}" onclick="selectSliderDate(this, ${i})">
                 <span class="text-xl font-bold">${i}</span>
@@ -515,9 +643,9 @@ function renderDatesForMonth(year, monthIndex, activeDateToSet = null, scroll = 
             </button>
         `;
     }
-    
+
     dateContainer.innerHTML = dateHtml;
-    
+
     // Add ripple effect to new buttons
     const newCards = dateContainer.querySelectorAll('.date-card');
     newCards.forEach(btn => {
@@ -527,19 +655,19 @@ function renderDatesForMonth(year, monthIndex, activeDateToSet = null, scroll = 
         btn.style.overflow = 'visible';
         btn.addEventListener('mousedown', createRipple);
         btn.addEventListener('touchstart', (e) => {
-            if(e.touches.length > 0) {
+            if (e.touches.length > 0) {
                 const touch = e.touches[0];
                 e.clientX = touch.clientX;
                 e.clientY = touch.clientY;
                 createRipple(e);
             }
-        }, {passive: true});
+        }, { passive: true });
     });
-    
+
     if (scroll && activeId) {
         setTimeout(() => {
             const activeEl = document.getElementById(activeId);
-            if(activeEl) {
+            if (activeEl) {
                 dateContainer.scrollTo({
                     left: activeEl.offsetLeft - 24,
                     behavior: 'smooth'
@@ -553,19 +681,19 @@ function changeSliderMonth(monthIndex) {
     const today = new Date();
     // Assuming current year for simplicity
     const currentYear = today.getFullYear();
-    
+
     // If selecting current month, auto-select today, otherwise 1st
     const dateToSelect = (monthIndex === today.getMonth()) ? today.getDate() : 1;
-    
+
     renderDatesForMonth(currentYear, monthIndex, dateToSelect, true);
-    
+
     // Easy way to rebuild month slider
     const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
     const monthContainer = document.getElementById('mobile-month-selector');
     let monthHtml = '';
-    const theme = document.documentElement.getAttribute('data-theme') || 'green';
+    const theme = document.documentElement.getAttribute('data-theme') || 'light';
     const primaryColor = theme === 'blue' ? '#5BA4C9' : '#10B981';
-    
+
     months.forEach((m, i) => {
         if (i === monthIndex) {
             monthHtml += `<button class="shrink-0 text-sm font-medium text-white px-4 py-1.5 rounded-full whitespace-nowrap shadow-md focus:outline-none theme-bg-update" id="active-month-btn" style="background-color: ${primaryColor}">${m}</button>`;
@@ -574,7 +702,7 @@ function changeSliderMonth(monthIndex) {
         }
     });
     monthContainer.innerHTML = monthHtml;
-    
+
     setTimeout(() => {
         const activeMonthBtn = document.getElementById('active-month-btn');
         if (activeMonthBtn) {
@@ -592,7 +720,7 @@ function changeSliderMonth(monthIndex) {
 function selectSliderDate(el, dateNum) {
     const container = document.getElementById('mobile-date-selector');
     const cards = container.querySelectorAll('.date-card');
-    
+
     // Reset all
     cards.forEach(card => {
         card.classList.remove('active', 'theme-bg-update', 'shadow-md', 'text-white');
@@ -601,11 +729,11 @@ function selectSliderDate(el, dateNum) {
         card.style.transform = 'none';
         card.style.color = 'var(--text-main)';
     });
-    
+
     // Set active
-    const theme = document.documentElement.getAttribute('data-theme') || 'green';
+    const theme = document.documentElement.getAttribute('data-theme') || 'light';
     const primaryColor = theme === 'blue' ? '#5BA4C9' : '#10B981';
-    
+
     el.classList.add('active', 'theme-bg-update', 'shadow-md', 'text-white');
     el.classList.remove('bg-white', 'shadow-sm');
     el.style.backgroundColor = primaryColor;
